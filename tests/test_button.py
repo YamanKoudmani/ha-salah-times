@@ -86,12 +86,19 @@ class TestDebugRefreshButton:
         mock_coordinator,
         mock_config_entry,
         mock_aladhan_client: AsyncMock,
+        expected_lingering_timers: bool = True,
     ) -> None:
         """End-to-end test: pressing the button results in the API being called.
 
         This tests that ``async_press()`` → ``async_request_refresh()`` →
         ``_async_update_data()`` → ``api.async_get_timings()`` actually fires
         on the underlying HTTP client.
+
+        ``async_request_refresh`` schedules a debouncer timer inside
+        ``DataUpdateCoordinator`` that the test framework's lingering
+        check would otherwise flag.  The HA-idiomatic way to declare
+        this expected is to request ``expected_lingering_timers=True``
+        in the test signature.
         """
         mock_aladhan_client.async_get_timings.reset_mock()
 
@@ -104,12 +111,6 @@ class TestDebugRefreshButton:
         await button.async_press()
 
         mock_aladhan_client.async_get_timings.assert_awaited()
-
-        # ``async_press`` → ``async_request_refresh`` schedules a
-        # debouncer timer in the event loop.  Cancel it so the
-        # framework's lingering-timer check stays happy.
-        if getattr(mock_coordinator, "_debouncer", None) is not None:
-            await mock_coordinator._debouncer.async_cancel()
 
     async def test_entity_description(
         self,

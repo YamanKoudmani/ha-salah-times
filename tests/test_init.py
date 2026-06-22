@@ -91,13 +91,23 @@ class TestInit:
             mock_config_entry.async_on_unload = _original_on_unload
 
     async def test_options_update_listener(
-        self, hass: HomeAssistant, mock_config_entry, mock_coordinator
+        self,
+        hass: HomeAssistant,
+        mock_config_entry,
+        mock_coordinator,
+        expected_lingering_timers: bool = True,
     ) -> None:
         """Test that the options update listener fires.
 
         Changes an option value and verifies that async_options_updated
         is called, the coordinator update_interval is adjusted, and
         a refresh is triggered.
+
+        ``async_options_updated`` calls ``coordinator.async_request_refresh``,
+        which schedules a debouncer timer inside ``DataUpdateCoordinator``
+        that the test framework's lingering check would otherwise flag.
+        Requesting ``expected_lingering_timers=True`` is the HA-idiomatic
+        way to declare this expected.
         """
         from custom_components.salah_times import async_options_updated
 
@@ -121,12 +131,6 @@ class TestInit:
         await async_options_updated(hass, mock_config_entry)
 
         assert mock_coordinator.update_interval == timedelta(hours=12)
-
-        # ``async_options_updated`` calls ``coordinator.async_request_refresh``
-        # which schedules a debouncer timer in the event loop.  Cancel it
-        # so the framework's lingering-timer check stays happy.
-        if getattr(mock_coordinator, "_debouncer", None) is not None:
-            await mock_coordinator._debouncer.async_cancel()
 
     async def test_multi_entry_setup(
         self,
