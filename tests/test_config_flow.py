@@ -71,10 +71,15 @@ class TestConfigFlow:
 
         # The config flow framework auto-sets-up the new entry, which
         # creates a coordinator and registers the midnight-refresh
-        # listener.  Explicitly unload it so the lingering-timer check
+        # listener.  Explicitly unload it (and the coordinator directly
+        # via the runtime_data reference) so the lingering-timer check
         # doesn't flag the wall-clock timer.
         entry = result["result"]
         await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+        coordinator = getattr(entry, "runtime_data", None)
+        if coordinator is not None and hasattr(coordinator, "async_unload"):
+            await coordinator.async_unload()
         await hass.async_block_till_done()
 
     async def test_unique_id_collision_abort(
@@ -118,6 +123,11 @@ class TestConfigFlow:
             if entry.state is ConfigEntryState.LOADED:
                 await hass.config_entries.async_unload(entry.entry_id)
                 await hass.async_block_till_done()
+            # Also unload the coordinator directly via runtime_data.
+            coordinator = getattr(entry, "runtime_data", None)
+            if coordinator is not None and hasattr(coordinator, "async_unload"):
+                await coordinator.async_unload()
+        await hass.async_block_till_done()
 
     async def test_invalid_coordinates(
         self, hass: HomeAssistant
@@ -200,6 +210,11 @@ class TestConfigFlow:
             if loaded_entry.state is ConfigEntryState.LOADED:
                 await hass.config_entries.async_unload(loaded_entry.entry_id)
                 await hass.async_block_till_done()
+            # Also unload the coordinator directly via runtime_data.
+            coordinator = getattr(loaded_entry, "runtime_data", None)
+            if coordinator is not None and hasattr(coordinator, "async_unload"):
+                await coordinator.async_unload()
+        await hass.async_block_till_done()
         # Verify entry data was updated
         assert entry.data[CONF_NAME] == "Updated Location"
         assert entry.data[CONF_LATITUDE] == 34.0522
