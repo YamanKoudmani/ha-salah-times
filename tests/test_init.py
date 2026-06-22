@@ -95,7 +95,6 @@ class TestInit:
         hass: HomeAssistant,
         mock_config_entry,
         mock_coordinator,
-        expected_lingering_timers: bool = True,
     ) -> None:
         """Test that the options update listener fires.
 
@@ -103,16 +102,26 @@ class TestInit:
         is called, the coordinator update_interval is adjusted, and
         a refresh is triggered.
 
-        ``async_options_updated`` calls ``coordinator.async_request_refresh``,
-        which schedules a debouncer timer inside ``DataUpdateCoordinator``
-        that the test framework's lingering check would otherwise flag.
-        Requesting ``expected_lingering_timers=True`` is the HA-idiomatic
-        way to declare this expected.
+        ``async_request_refresh`` is monkey-patched to a coroutine that
+        just runs ``_async_update_data`` directly, bypassing the
+        ``DataUpdateCoordinator`` debouncer.  The debouncer schedules a
+        long-cooldown timer that the test framework's lingering-timer
+        check would otherwise flag, and its internal state isn't
+        reliably reachable across HA versions.
         """
         from custom_components.salah_times import async_options_updated
 
         # Set the runtime_data so the listener can find the coordinator
         mock_config_entry.runtime_data = mock_coordinator
+
+        # Bypass the DataUpdateCoordinator debouncer: its long-cooldown
+        # timer would otherwise be flagged as lingering by the test
+        # framework, and the debouncer's internal state isn't reliably
+        # reachable across HA versions.
+        async def _bypass_request_refresh() -> None:
+            await mock_coordinator._async_update_data()
+
+        mock_coordinator.async_request_refresh = _bypass_request_refresh  # type: ignore[method-assign]
 
         original_interval = mock_coordinator.update_interval
         assert original_interval == timedelta(hours=DEFAULT_POLLING_INTERVAL_HOURS)

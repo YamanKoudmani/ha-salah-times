@@ -86,7 +86,6 @@ class TestDebugRefreshButton:
         mock_coordinator,
         mock_config_entry,
         mock_aladhan_client: AsyncMock,
-        expected_lingering_timers: bool = True,
     ) -> None:
         """End-to-end test: pressing the button results in the API being called.
 
@@ -94,13 +93,19 @@ class TestDebugRefreshButton:
         ``_async_update_data()`` → ``api.async_get_timings()`` actually fires
         on the underlying HTTP client.
 
-        ``async_request_refresh`` schedules a debouncer timer inside
-        ``DataUpdateCoordinator`` that the test framework's lingering
-        check would otherwise flag.  The HA-idiomatic way to declare
-        this expected is to request ``expected_lingering_timers=True``
-        in the test signature.
+        ``async_request_refresh`` is monkey-patched to a coroutine that
+        just runs ``_async_update_data`` directly, bypassing the
+        ``DataUpdateCoordinator`` debouncer.  The debouncer schedules a
+        long-cooldown timer that the test framework's lingering-timer
+        check would otherwise flag, and its internal state isn't
+        reliably reachable across HA versions.
         """
         mock_aladhan_client.async_get_timings.reset_mock()
+
+        async def _bypass_request_refresh() -> None:
+            await mock_coordinator._async_update_data()
+
+        mock_coordinator.async_request_refresh = _bypass_request_refresh  # type: ignore[method-assign]
 
         button = SalahTimesDebugRefreshButton(
             coordinator=mock_coordinator,
