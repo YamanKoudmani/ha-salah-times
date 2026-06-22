@@ -57,6 +57,7 @@ class SalahTimesDebugRefreshButton(SalahTimesEntity, ButtonEntity):
         super().__init__(coordinator, entry_id, name)
         self.entity_description = DEBUG_REFRESH_DESCRIPTION
         self._attr_unique_id = f"{entry_id}-refresh"
+        self._attr_order = 200
 
     async def async_press(self) -> None:
         """Press the button — force-refresh the coordinator."""
