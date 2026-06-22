@@ -271,9 +271,46 @@ async def mock_coordinator(
 async def _auto_unload_loaded_entries(
     hass: HomeAssistant,
 ) -> AsyncGenerator[None, None]:
-    """Unload any still-LOADED config entries after each test runs."""
+    """Unload any still-LOADED config entries after each test runs.
+
+    Belt-and-suspenders: we both unload the entry (which fires
+    ``entry.async_on_unload`` callbacks and should cancel the midnight
+    listener) **and** call ``coordinator.async_unload()`` directly via
+    ``entry.runtime_data``.  The direct call is needed because some
+    test paths in newer ``pytest-homeassistant-custom-component``
+    versions set up the entry through a code path that doesn't always
+    trigger the ``async_on_unload`` callbacks the integration
+    registered, leaving the wall-clock timer registered in the event
+    loop and tripping the framework's lingering-timer check.
+
+    ``coordinator.async_unload`` is idempotent, so calling it after a
+    successful entry unload is a harmless no-op.
+
+    A final ``async_block_till_done`` flushes any short-lived timers
+    scheduled by helpers like ``DataUpdateCoordinator``'s debouncer
+    (used in tests that call ``async_request_refresh`` directly, e.g.
+    the debug-refresh button tests) before the framework's lingering
+    timer check runs.
+    """
     yield
     for entry in hass.config_entries.async_entries(DOMAIN):
+        # Direct cleanup first: the coordinator's runtime_data holds the
+        # midnight-refresh cancel callback.  Cancelling it here is the
+        # most reliable way to release the lingering _TrackPointUTCTime
+        # timer regardless of how the entry was set up.
+        coordinator = getattr(entry, "runtime_data", None)
+        if coordinator is not None and hasattr(coordinator, "async_unload"):
+            await coordinator.async_unload()
+
+        # Then unload the entry itself so the framework releases any
+        # other resources tied to it (forwarded platforms, runtime data,
+        # etc.).
         if entry.state is ConfigEntryState.LOADED:
             await hass.config_entries.async_unload(entry.entry_id)
             await hass.async_block_till_done()
+
+    # Flush any short-lived timers (e.g. DataUpdateCoordinator's
+    # internal debouncer used by async_request_refresh) so they don't
+    # trip the framework's lingering-timer check on tests that don't
+    # go through the entry lifecycle.
+    await hass.async_block_till_done()

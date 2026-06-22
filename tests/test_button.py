@@ -105,6 +105,12 @@ class TestDebugRefreshButton:
 
         mock_aladhan_client.async_get_timings.assert_awaited()
 
+        # ``async_press`` → ``async_request_refresh`` schedules a
+        # debouncer timer in the event loop.  Cancel it so the
+        # framework's lingering-timer check stays happy.
+        if getattr(mock_coordinator, "_debouncer", None) is not None:
+            await mock_coordinator._debouncer.async_cancel()
+
     async def test_entity_description(
         self,
         hass: HomeAssistant,

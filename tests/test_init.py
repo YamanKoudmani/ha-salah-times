@@ -122,6 +122,12 @@ class TestInit:
 
         assert mock_coordinator.update_interval == timedelta(hours=12)
 
+        # ``async_options_updated`` calls ``coordinator.async_request_refresh``
+        # which schedules a debouncer timer in the event loop.  Cancel it
+        # so the framework's lingering-timer check stays happy.
+        if getattr(mock_coordinator, "_debouncer", None) is not None:
+            await mock_coordinator._debouncer.async_cancel()
+
     async def test_multi_entry_setup(
         self,
         hass: HomeAssistant,
