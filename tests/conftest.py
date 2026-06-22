@@ -291,6 +291,14 @@ async def _auto_unload_loaded_entries(
     (used in tests that call ``async_request_refresh`` directly, e.g.
     the debug-refresh button tests) before the framework's lingering
     timer check runs.
+
+    As a last resort, scan the event loop for any
+    ``_TrackPointUTCTime`` handles whose job targets
+    ``SalahTimesCoordinator._handle_midnight_refresh`` and cancel
+    them.  This catches timers whose owner we can't otherwise reach
+    (e.g. the config-flow auto-setup path in newer plugin versions
+    where ``entry.runtime_data`` isn't populated yet when this
+    fixture runs).
     """
     yield
     for entry in hass.config_entries.async_entries(DOMAIN):
@@ -314,3 +322,36 @@ async def _auto_unload_loaded_entries(
     # trip the framework's lingering-timer check on tests that don't
     # go through the entry lifecycle.
     await hass.async_block_till_done()
+
+    # Last-resort sweep: cancel any _TrackPointUTCTime handles still
+    # scheduled in the event loop that belong to
+    # SalahTimesCoordinator._handle_midnight_refresh.  This handles
+    # the config-flow tests where the auto-setup path in newer
+    # pytest-homeassistant-custom-component doesn't expose the
+    # coordinator to us via entry.runtime_data.
+    try:
+        loop = hass.loop
+        # asyncio handles aren't easily iterable; iterate the
+        # scheduled list via the private _scheduled attribute if
+        # available, otherwise fall back to cancelling the whole
+        # default executor.  We try the safe path first.
+        handles = getattr(loop, "_scheduled", None) or []
+        for handle in list(handles):
+            callback = getattr(handle, "_callback", None) or getattr(
+                handle, "callback", None
+            )
+            if callback is None:
+                continue
+            # The handle's callback may be wrapped; unwrap one level
+            # to look at the underlying call.
+            inner = getattr(callback, "__self__", None) or getattr(
+                callback, "func", None
+            )
+            method_name = getattr(callback, "__name__", "") or ""
+            if (
+                method_name == "_handle_midnight_refresh"
+                or (inner is not None and getattr(inner, "__name__", "") == "_handle_midnight_refresh")
+            ):
+                handle.cancel()
+    except Exception:  # noqa: BLE001 - best-effort cleanup, never fail the test
+        pass
