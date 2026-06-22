@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import logging
 from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntityDescription
@@ -20,6 +21,8 @@ from .const import DOMAIN
 from .coordinator import SalahTimesCoordinator
 from .entity import SalahTimesEntity
 from .models import PRAYER_ORDER, PrayerName
+
+_LOGGER = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Prayer timestamp sensor descriptions
@@ -128,8 +131,18 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
         Returns None if the coordinator has not yet fetched data.
         """
         if self.coordinator.data is None:
+            _LOGGER.debug("native_value: coordinator.data is None for %s", self._prayer)
             return None
-        return self.coordinator.data.timings.get(self._prayer)
+        timings = self.coordinator.data.timings
+        value = timings.get(self._prayer)
+        _LOGGER.debug(
+            "native_value: prayer=%s value=%s type=%s timings_keys=%s",
+            self._prayer,
+            value,
+            type(value).__name__,
+            list(timings.keys()),
+        )
+        return value
 
 
 # ---------------------------------------------------------------------------
