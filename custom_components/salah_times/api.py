@@ -115,8 +115,15 @@ def _parse_timing_to_utc(
     The time is interpreted in the timezone given by *tz_info* (or, if
     ``None``, in Home Assistant's configured timezone), then converted to
     UTC for consistent storage.
+
+    Handles times that include a timezone abbreviation suffix (e.g.
+    ``"03:50 (EDT)"`` from the AlAdhan ``/calendar`` endpoint) by
+    stripping everything after the first space.
     """
-    hour_str, minute_str = time_str.split(":", 1)
+    # Strip timezone abbreviation suffix from /calendar endpoint
+    # e.g. "03:50 (EDT)" → "03:50"
+    clean_time = time_str.split(" ")[0]
+    hour_str, minute_str = clean_time.split(":", 1)
     hour = int(hour_str)
     minute = int(minute_str)
     if tz_info is None:
