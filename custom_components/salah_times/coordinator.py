@@ -8,10 +8,11 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.event import async_track_time_change
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
     UpdateFailed,
@@ -87,6 +88,27 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
         self._api = api
         self._config_entry = config_entry
         self._month_cache: dict[date, PrayerTimes] = {}
+
+        # ------------------------------------------------------------------
+        # Daily midnight refresh (independent of polling interval)
+        # ------------------------------------------------------------------
+        # ``update_interval`` alone cannot guarantee a refresh right at the
+        # day boundary: with a 6h interval the next poll may land hours
+        # after midnight, leaving sensors showing yesterday's data until
+        # then.  Registering a wall-clock listener on local 00:00:00 ensures
+        # a fresh fetch every night regardless of the configured interval.
+        # ``async_track_time_change`` returns a callable that cancels the
+        # listener when invoked; it is stored so :meth:`async_unload` can
+        # release it on entry teardown.
+        self._cancel_midnight_refresh: Callable[[], None] | None = (
+            async_track_time_change(
+                hass,
+                self._handle_midnight_refresh,
+                hour=0,
+                minute=0,
+                second=0,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Public property
@@ -214,3 +236,28 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
             self._month_cache = await self._api.async_get_month_calendar(**kwargs)
         except SalahTimesAPIError as err:
             _LOGGER.warning("Failed to refresh month cache: %s", err)
+
+    async def _handle_midnight_refresh(self, now: Any) -> None:
+        """Trigger a refresh at local midnight each day.
+
+        Wired to ``async_track_time_change`` in :meth:`__init__`.  Fires
+        at 00:00:00 local time, independent of ``update_interval``, so
+        sensors never sit on yesterday's data when the regular poll would
+        otherwise land hours after the day boundary.
+
+        ``now`` is the ``datetime`` injected by the time-change helper
+        (unused, but required by the callback signature).
+        """
+        _LOGGER.debug("Midnight refresh triggered for %s", DOMAIN)
+        await self.async_request_refresh()
+
+    async def async_unload(self) -> None:
+        """Cancel the midnight refresh listener.
+
+        Intended to be wired to ``ConfigEntry.async_on_unload`` by the
+        integration's ``__init__.py`` so the listener is released on
+        config-entry teardown.  Safe to call multiple times.
+        """
+        if self._cancel_midnight_refresh is not None:
+            self._cancel_midnight_refresh()
+            self._cancel_midnight_refresh = None

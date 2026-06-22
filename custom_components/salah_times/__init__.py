@@ -114,6 +114,15 @@ async def async_setup_entry(
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     # ------------------------------------------------------------------
+    # Release the daily midnight refresh listener on entry teardown
+    # ------------------------------------------------------------------
+    # The coordinator registers a wall-clock listener on local 00:00:00
+    # so a refresh always happens at the day boundary regardless of the
+    # configured polling interval.  Wire its cancellation to the entry
+    # lifecycle so reloading/unloading the entry releases the listener.
+    entry.async_on_unload(coordinator.async_unload)
+
+    # ------------------------------------------------------------------
     # Listen for options updates
     # ------------------------------------------------------------------
     entry.async_on_unload(

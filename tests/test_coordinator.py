@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from unittest.mock import AsyncMock
+from datetime import date, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -205,3 +205,138 @@ class TestCoordinator:
 
         # Fallback must NOT have been called
         assert mock_islamic_app_client.async_get_timings.call_count == 0
+
+
+class TestMidnightRefresh:
+    """Tests for the daily midnight refresh listener.
+
+    The listener is independent of ``update_interval`` and guarantees a
+    coordinator refresh at 00:00:00 local time every night, so sensors
+    never sit on yesterday's data when the regular poll would otherwise
+    land hours after the day boundary.
+    """
+
+    async def test_midnight_listener_registered(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry,
+        mock_aladhan_client: AsyncMock,
+    ) -> None:
+        """Coordinator registers a wall-clock listener on local 00:00:00."""
+        with patch(
+            "custom_components.salah_times.coordinator.async_track_time_change"
+        ) as mock_track:
+            mock_track.return_value = MagicMock()
+            api = SalahTimesAPI(
+                primary=mock_aladhan_client,
+                fallback=None,
+                enable_failover=False,
+            )
+            SalahTimesCoordinator(hass, mock_config_entry, api)
+
+        # Listener must be registered for 00:00:00 local time
+        mock_track.assert_called_once()
+        args, kwargs = mock_track.call_args
+        assert args[0] is hass
+        assert kwargs.get("hour") == 0
+        assert kwargs.get("minute") == 0
+        assert kwargs.get("second") == 0
+
+    async def test_midnight_listener_triggers_refresh(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry,
+        mock_aladhan_client: AsyncMock,
+    ) -> None:
+        """Invoking the midnight callback requests a coordinator refresh."""
+        api = SalahTimesAPI(
+            primary=mock_aladhan_client,
+            fallback=None,
+            enable_failover=False,
+        )
+        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+
+        # Replace async_request_refresh with an AsyncMock so we can
+        # verify it was awaited when the midnight callback fires.
+        coordinator.async_request_refresh = AsyncMock()
+
+        await coordinator._handle_midnight_refresh(datetime.now())
+
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_midnight_listener_works_with_long_polling_interval(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry,
+        mock_aladhan_client: AsyncMock,
+    ) -> None:
+        """Midnight refresh fires regardless of the configured polling interval.
+
+        With a 24h polling interval, the regular poll could land far from
+        midnight.  This guards against a regression where the midnight
+        listener is silently disabled for long intervals.
+        """
+        # Simulate a user-configured 24h polling interval.  HA 2026.2
+        # blocks direct mutation of ConfigEntry.options; use the
+        # supported async_update_entry helper.
+        hass.config_entries.async_update_entry(
+            mock_config_entry,
+            options={
+                **mock_config_entry.options,
+                "polling_interval_hours": 24,
+            },
+        )
+
+        api = SalahTimesAPI(
+            primary=mock_aladhan_client,
+            fallback=None,
+            enable_failover=False,
+        )
+        with patch(
+            "custom_components.salah_times.coordinator.async_track_time_change"
+        ) as mock_track:
+            mock_track.return_value = MagicMock()
+            coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+
+        # Listener must still be registered at 00:00:00
+        mock_track.assert_called_once()
+        _, kwargs = mock_track.call_args
+        assert kwargs.get("hour") == 0
+        assert kwargs.get("minute") == 0
+        assert kwargs.get("second") == 0
+
+        # And the callback still triggers a refresh
+        coordinator.async_request_refresh = AsyncMock()
+        await coordinator._handle_midnight_refresh(datetime.now())
+        coordinator.async_request_refresh.assert_awaited_once()
+
+    async def test_async_unload_cancels_midnight_listener(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry,
+        mock_aladhan_client: AsyncMock,
+    ) -> None:
+        """``async_unload`` cancels the registered listener exactly once."""
+        cancel = MagicMock()
+        with patch(
+            "custom_components.salah_times.coordinator.async_track_time_change"
+        ) as mock_track:
+            mock_track.return_value = cancel
+            api = SalahTimesAPI(
+                primary=mock_aladhan_client,
+                fallback=None,
+                enable_failover=False,
+            )
+            coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+
+        # Listener is held until unload
+        assert coordinator._cancel_midnight_refresh is cancel
+
+        await coordinator.async_unload()
+
+        cancel.assert_called_once()
+        assert coordinator._cancel_midnight_refresh is None
+
+        # Second call must be a no-op
+        await coordinator.async_unload()
+        cancel.assert_called_once()
