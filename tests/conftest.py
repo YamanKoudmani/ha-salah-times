@@ -310,3 +310,13 @@ async def _auto_unload_loaded_entries(
     # internal debouncer) so they don't trip the framework's
     # lingering-timer check.
     await hass.async_block_till_done()
+
+    # Pre-shutdown the default executor so the test framework's
+    # verify_cleanup shutdown is effectively a no-op.  Without this,
+    # ``shutdown_default_executor`` spawns a ``_run_safe_shutdown_loop``
+    # daemon thread that the framework's thread-leak check flags as
+    # lingering.
+    try:
+        await hass.loop.shutdown_default_executor()
+    except Exception:  # noqa: BLE001 - best-effort, never fail the test
+        pass
