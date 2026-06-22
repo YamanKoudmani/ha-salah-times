@@ -71,16 +71,10 @@ class TestConfigFlow:
 
         # The config flow framework auto-sets-up the new entry, which
         # creates a coordinator and registers the midnight-refresh
-        # listener.  Explicitly unload it (and the coordinator directly
-        # via the runtime_data reference) so the lingering-timer check
-        # doesn't flag the wall-clock timer.
-        entry = result["result"]
-        await hass.config_entries.async_unload(entry.entry_id)
-        await hass.async_block_till_done()
-        coordinator = getattr(entry, "runtime_data", None)
-        if coordinator is not None and hasattr(coordinator, "async_unload"):
-            await coordinator.async_unload()
-        await hass.async_block_till_done()
+        # listener.  Cleanup is handled by the conftest autouse
+        # fixture, which walks SalahTimesCoordinator._all_instances
+        # and calls async_unload on every coordinator created during
+        # the test.
 
     async def test_unique_id_collision_abort(
         self, hass: HomeAssistant
@@ -117,17 +111,8 @@ class TestConfigFlow:
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "already_configured"
 
-        # Unload the first entry so the coordinator's midnight-refresh
-        # listener is cancelled before the lingering-timer check runs.
-        for entry in hass.config_entries.async_entries(DOMAIN):
-            if entry.state is ConfigEntryState.LOADED:
-                await hass.config_entries.async_unload(entry.entry_id)
-                await hass.async_block_till_done()
-            # Also unload the coordinator directly via runtime_data.
-            coordinator = getattr(entry, "runtime_data", None)
-            if coordinator is not None and hasattr(coordinator, "async_unload"):
-                await coordinator.async_unload()
-        await hass.async_block_till_done()
+        # Coordinator cleanup is handled by the conftest autouse
+        # fixture via the class-level _all_instances registry.
 
     async def test_invalid_coordinates(
         self, hass: HomeAssistant
@@ -204,17 +189,9 @@ class TestConfigFlow:
         assert result["reason"] == "reconfigure_successful"
 
         # ``async_update_reload_and_abort`` reloads the entry, which
-        # sets it up and registers the midnight-refresh listener.  Unload
-        # it so the lingering-timer check stays happy.
-        for loaded_entry in hass.config_entries.async_entries(DOMAIN):
-            if loaded_entry.state is ConfigEntryState.LOADED:
-                await hass.config_entries.async_unload(loaded_entry.entry_id)
-                await hass.async_block_till_done()
-            # Also unload the coordinator directly via runtime_data.
-            coordinator = getattr(loaded_entry, "runtime_data", None)
-            if coordinator is not None and hasattr(coordinator, "async_unload"):
-                await coordinator.async_unload()
-        await hass.async_block_till_done()
+        # sets it up and registers the midnight-refresh listener.
+        # Cleanup is handled by the conftest autouse fixture via the
+        # class-level _all_instances registry.
         # Verify entry data was updated
         assert entry.data[CONF_NAME] == "Updated Location"
         assert entry.data[CONF_LATITUDE] == 34.0522
