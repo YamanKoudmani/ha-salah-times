@@ -37,6 +37,13 @@
           "default": "mdi:calendar-text"
         }
       }
+    },
+    "button": {
+      "salah_times": {
+        "refresh": {
+          "default": "mdi:refresh"
+        }
+      }
     }
   }
 }

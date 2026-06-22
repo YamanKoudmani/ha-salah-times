@@ -79,6 +79,11 @@
       "prayer_schedule": {
         "name": "Prayer Schedule"
       }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      }
     }
   },
   "services": {
