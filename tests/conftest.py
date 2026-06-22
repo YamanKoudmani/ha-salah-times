@@ -271,35 +271,30 @@ async def mock_coordinator(
 async def _auto_unload_loaded_entries(
     hass: HomeAssistant,
 ) -> AsyncGenerator[None, None]:
-    """Unload any still-LOADED config entries after each test runs.
+    """Cancel every coordinator's midnight-refresh listener after each test.
 
     The integration's only async resource that survives a test is the
     midnight-refresh wall-clock listener on the coordinator.  Cancelling
-    that listener is enough to keep the framework's lingering-timer
-    check happy, and avoids the executor-shutdown side effects that
-    calling ``hass.config_entries.async_unload`` can trigger (a
-    ``_run_safe_shutdown_loop`` daemon thread is flagged as a leak
-    by the framework's thread check).
+    that listener is enough to satisfy the framework's lingering-timer
+    check.
 
     We walk ``SalahTimesCoordinator._all_instances`` and call
     ``async_unload`` on every coordinator created during the test.
-    This is the most reliable way to reach the midnight-refresh
-    listener on coordinators the test never bound to a config entry
-    (e.g. those auto-created by the config-flow framework in newer
+    This is the most reliable way to reach the listener on coordinators
+    the test never bound to a config entry (e.g. those auto-created
+    by the config-flow framework in newer
     ``pytest-homeassistant-custom-component``, where
     ``entry.runtime_data`` isn't populated yet at cleanup time).
     """
     yield
 
-    # Drain any pending tasks first so the executor is idle when the
-    # test framework's verify_cleanup shuts it down (avoids the
-    # _run_safe_shutdown_loop daemon thread being flagged as lingering).
+    # Drain any pending tasks so timers scheduled during the test
+    # (e.g. the midnight listener's own callbacks) get a chance to
+    # fire before we tear them down.
     await hass.async_block_till_done()
 
     # Walk the class-level registry and cancel every coordinator's
-    # midnight-refresh listener.  This is sufficient to satisfy the
-    # lingering-timer check without triggering the entry-unload path
-    # that spawns the _run_safe_shutdown_loop thread.
+    # midnight-refresh listener.
     instances = list(SalahTimesCoordinator._all_instances)
     for coordinator in instances:
         await coordinator.async_unload()
@@ -310,18 +305,3 @@ async def _auto_unload_loaded_entries(
     # internal debouncer) so they don't trip the framework's
     # lingering-timer check.
     await hass.async_block_till_done()
-
-    # Pre-shutdown the default executor so the test framework's
-    # verify_cleanup shutdown is effectively a no-op.  Without this,
-    # ``shutdown_default_executor`` spawns a ``_run_safe_shutdown_loop``
-    # daemon thread that the framework's thread-leak check flags as
-    # lingering.
-    try:
-        await hass.loop.shutdown_default_executor()
-    except Exception:  # noqa: BLE001 - best-effort, never fail the test
-        pass
-
-    # Give the shutdown thread a moment to exit before the test
-    # framework's thread-leak check runs.
-    import asyncio
-    await asyncio.sleep(0)
