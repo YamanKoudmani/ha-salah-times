@@ -115,30 +115,19 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
         self._prayer = prayer
         self._attr_unique_id = f"{entry_id}-{prayer.value}"
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the UTC datetime of this prayer time."""
-        if self.coordinator.data is None:
-            return None
-        value = self.coordinator.data.timings.get(self._prayer)
-        _LOGGER.debug(
-            "Prayer sensor %s: value=%s type=%s",
-            self._prayer,
-            value,
-            type(value).__name__ if value else "None",
-        )
-        return value
-
     @callback
     def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator.
-
-        Sets ``_attr_native_value`` directly so HA's state machine
-        picks it up, then writes the state.
-        """
+        """Handle updated data from the coordinator."""
         data: PrayerTimes | None = self.coordinator.data
         if data is not None:
-            self._attr_native_value = data.timings.get(self._prayer)
+            value = data.timings.get(self._prayer)
+            _LOGGER.debug(
+                "Prayer sensor %s: value=%s type=%s",
+                self._prayer,
+                value,
+                type(value).__name__ if value else "None",
+            )
+            self._attr_native_value = value
         else:
             self._attr_native_value = None
         self.async_write_ha_state()
@@ -182,39 +171,35 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity):
 
         return None, None, None
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the UTC datetime of the next upcoming obligatory prayer."""
-        next_time, _, _ = self._compute_next_prayer()
-        return next_time
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes."""
-        data: PrayerTimes | None = self.coordinator.data
-        if data is None:
-            return {}
-
-        next_time, next_prayer_name, time_remaining = self._compute_next_prayer()
-
-        return {
-            "prayer": next_prayer_name,
-            "time_remaining": time_remaining,
-            "hijri_date": data.hijri_date,
-            "hijri_holidays": data.hijri_holidays,
-            "calculation_method": data.calculation_method,
-            "provider": data.provider,
-        }
-
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator.
 
         Sets ``_attr_native_value`` and ``_attr_extra_state_attributes``
-        directly so HA's state machine picks them up.
+        directly.  In HA 2026.6+ this is the preferred pattern — property
+        overrides on ``native_value`` may not be called reliably.
         """
-        next_time, next_prayer_name, time_remaining = self._compute_next_prayer()
         data: PrayerTimes | None = self.coordinator.data
+        if data is None:
+            self._attr_native_value = None
+            self._attr_extra_state_attributes = None
+            self.async_write_ha_state()
+            return
+
+        now = dt_util.utcnow()
+        next_time: datetime | None = None
+        next_prayer_name: str | None = None
+
+        for prayer in PRAYER_ORDER:
+            prayer_time = data.timings.get(prayer)
+            if prayer_time is not None and prayer_time > now:
+                next_time = prayer_time
+                next_prayer_name = prayer.value
+                break
+
+        time_remaining: int | None = None
+        if next_time is not None:
+            time_remaining = int((next_time - now).total_seconds())
 
         _LOGGER.debug(
             "Next prayer: name=%s time=%s remaining=%s",
@@ -224,17 +209,14 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity):
         )
 
         self._attr_native_value = next_time
-        if data is not None:
-            self._attr_extra_state_attributes = {
-                "prayer": next_prayer_name,
-                "time_remaining": time_remaining,
-                "hijri_date": data.hijri_date,
-                "hijri_holidays": data.hijri_holidays,
-                "calculation_method": data.calculation_method,
-                "provider": data.provider,
-            }
-        else:
-            self._attr_extra_state_attributes = None
+        self._attr_extra_state_attributes = {
+            "prayer": next_prayer_name,
+            "time_remaining": time_remaining,
+            "hijri_date": data.hijri_date,
+            "hijri_holidays": data.hijri_holidays,
+            "calculation_method": data.calculation_method,
+            "provider": data.provider,
+        }
         self.async_write_ha_state()
 
 

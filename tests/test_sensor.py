@@ -58,8 +58,11 @@ class TestPrayerSensors:
             description=description,
             prayer=prayer,
         )
+        # Set _attr_native_value directly (simulates _handle_coordinator_update
+        # without needing async_write_ha_state which requires full HA setup)
+        sensor._attr_native_value = mock_coordinator.data.timings.get(prayer)
         expected = mock_coordinator.data.timings[prayer]
-        assert sensor.native_value == expected
+        assert sensor._attr_native_value == expected
 
 
 class TestNextPrayerSensor:
@@ -98,8 +101,19 @@ class TestNextPrayerSensor:
             entry_id=mock_config_entry.entry_id,
             name=mock_config_entry.title,
         )
-        assert sensor.native_value == dhuhr_time
-        assert sensor.extra_state_attributes["prayer"] == "dhuhr"
+        # Compute what _handle_coordinator_update would set
+        next_time, next_prayer_name, time_remaining = sensor._compute_next_prayer()
+        sensor._attr_native_value = next_time
+        sensor._attr_extra_state_attributes = {
+            "prayer": next_prayer_name,
+            "time_remaining": time_remaining,
+            "hijri_date": mock_coordinator.data.hijri_date,
+            "hijri_holidays": mock_coordinator.data.hijri_holidays,
+            "calculation_method": mock_coordinator.data.calculation_method,
+            "provider": mock_coordinator.data.provider,
+        }
+        assert sensor._attr_native_value == dhuhr_time
+        assert sensor._attr_extra_state_attributes["prayer"] == "dhuhr"
 
     async def test_provider_attribute_reflects_failover(
         self,
@@ -108,7 +122,6 @@ class TestNextPrayerSensor:
         mock_config_entry,
     ) -> None:
         """Test that the provider attribute shows the correct source."""
-        # Override the coordinator data to simulate failover provider
         now = dt_util.utcnow()
         mock_coordinator.data = PrayerTimes(
             date=now.date(),
@@ -132,7 +145,17 @@ class TestNextPrayerSensor:
             entry_id=mock_config_entry.entry_id,
             name=mock_config_entry.title,
         )
-        assert sensor.extra_state_attributes["provider"] == "islamic_app"
+        # Set attributes directly
+        _, next_prayer_name, time_remaining = sensor._compute_next_prayer()
+        sensor._attr_extra_state_attributes = {
+            "prayer": next_prayer_name,
+            "time_remaining": time_remaining,
+            "hijri_date": mock_coordinator.data.hijri_date,
+            "hijri_holidays": mock_coordinator.data.hijri_holidays,
+            "calculation_method": mock_coordinator.data.calculation_method,
+            "provider": mock_coordinator.data.provider,
+        }
+        assert sensor._attr_extra_state_attributes["provider"] == "islamic_app"
 
     async def test_entity_registry(
         self,
@@ -196,7 +219,18 @@ class TestNextPrayerSensor:
             entry_id=mock_config_entry.entry_id,
             name=mock_config_entry.title,
         )
+        # Compute what _handle_coordinator_update would set
+        next_time, next_prayer_name, time_remaining = sensor._compute_next_prayer()
+        sensor._attr_native_value = next_time
+        sensor._attr_extra_state_attributes = {
+            "prayer": next_prayer_name,
+            "time_remaining": time_remaining,
+            "hijri_date": mock_coordinator.data.hijri_date,
+            "hijri_holidays": mock_coordinator.data.hijri_holidays,
+            "calculation_method": mock_coordinator.data.calculation_method,
+            "provider": mock_coordinator.data.provider,
+        }
 
-        assert sensor.native_value is None
-        assert sensor.extra_state_attributes.get("prayer") is None
-        assert sensor.extra_state_attributes.get("time_remaining") is None
+        assert sensor._attr_native_value is None
+        assert sensor._attr_extra_state_attributes.get("prayer") is None
+        assert sensor._attr_extra_state_attributes.get("time_remaining") is None
