@@ -320,3 +320,8 @@ async def _auto_unload_loaded_entries(
         await hass.loop.shutdown_default_executor()
     except Exception:  # noqa: BLE001 - best-effort, never fail the test
         pass
+
+    # Give the shutdown thread a moment to exit before the test
+    # framework's thread-leak check runs.
+    import asyncio
+    await asyncio.sleep(0)
