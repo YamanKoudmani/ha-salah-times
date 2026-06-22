@@ -86,6 +86,12 @@
       }
     }
   },
+  "services": {
+    "refresh": {
+      "name": "Refresh prayer times",
+      "description": "Force an immediate refresh of prayer times for one or all Salah Times entries."
+    }
+  },
   "selector": {
     "calculation_method": {
       "options": {
