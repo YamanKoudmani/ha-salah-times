@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -68,6 +69,14 @@ class TestConfigFlow:
         )
         assert result["options"][CONF_ENABLE_FAILOVER] == DEFAULT_ENABLE_FAILOVER
 
+        # The config flow framework auto-sets-up the new entry, which
+        # creates a coordinator and registers the midnight-refresh
+        # listener.  Explicitly unload it so the lingering-timer check
+        # doesn't flag the wall-clock timer.
+        entry = result["result"]
+        await hass.config_entries.async_unload(entry.entry_id)
+        await hass.async_block_till_done()
+
     async def test_unique_id_collision_abort(
         self, hass: HomeAssistant
     ) -> None:
@@ -102,6 +111,13 @@ class TestConfigFlow:
         )
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "already_configured"
+
+        # Unload the first entry so the coordinator's midnight-refresh
+        # listener is cancelled before the lingering-timer check runs.
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.state is ConfigEntryState.LOADED:
+                await hass.config_entries.async_unload(entry.entry_id)
+                await hass.async_block_till_done()
 
     async def test_invalid_coordinates(
         self, hass: HomeAssistant
@@ -176,6 +192,14 @@ class TestConfigFlow:
         )
         assert result["type"] is FlowResultType.ABORT
         assert result["reason"] == "reconfigure_successful"
+
+        # ``async_update_reload_and_abort`` reloads the entry, which
+        # sets it up and registers the midnight-refresh listener.  Unload
+        # it so the lingering-timer check stays happy.
+        for loaded_entry in hass.config_entries.async_entries(DOMAIN):
+            if loaded_entry.state is ConfigEntryState.LOADED:
+                await hass.config_entries.async_unload(loaded_entry.entry_id)
+                await hass.async_block_till_done()
         # Verify entry data was updated
         assert entry.data[CONF_NAME] == "Updated Location"
         assert entry.data[CONF_LATITUDE] == 34.0522
