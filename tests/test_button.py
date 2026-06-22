@@ -80,6 +80,31 @@ class TestDebugRefreshButton:
 
         mock_coordinator.async_request_refresh.assert_awaited_once()
 
+    async def test_async_press_triggers_api_call(
+        self,
+        hass: HomeAssistant,
+        mock_coordinator,
+        mock_config_entry,
+        mock_aladhan_client: AsyncMock,
+    ) -> None:
+        """End-to-end test: pressing the button results in the API being called.
+
+        This tests that ``async_press()`` → ``async_request_refresh()`` →
+        ``_async_update_data()`` → ``api.async_get_timings()`` actually fires
+        on the underlying HTTP client.
+        """
+        mock_aladhan_client.async_get_timings.reset_mock()
+
+        button = SalahTimesDebugRefreshButton(
+            coordinator=mock_coordinator,
+            entry_id=mock_config_entry.entry_id,
+            name=mock_config_entry.title,
+        )
+
+        await button.async_press()
+
+        mock_aladhan_client.async_get_timings.assert_awaited()
+
     async def test_entity_description(
         self,
         hass: HomeAssistant,

@@ -11,7 +11,11 @@ from datetime import datetime
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import SensorDeviceClass, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+)
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -98,7 +102,7 @@ class NextPrayerSensorDescription(SensorEntityDescription):
 # ---------------------------------------------------------------------------
 
 
-class SalahTimesPrayerSensor(SalahTimesEntity):
+class SalahTimesPrayerSensor(SalahTimesEntity, SensorEntity):
     """Represents a single prayer time as a timestamp sensor."""
 
     def __init__(
@@ -114,6 +118,17 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
         self.entity_description = description
         self._prayer = prayer
         self._attr_unique_id = f"{entry_id}-{prayer.value}"
+        # Seed the initial value from the already-populated coordinator so the
+        # very first state write (in add_to_platform_finish) produces a valid
+        # timestamp instead of "unknown".  This is a belt-and-suspenders guard
+        # alongside async_added_to_hass: the coordinator's first refresh
+        # completes before entities are created, so data is always available
+        # here, and seeding it at creation time bypasses the platform-state
+        # check that silently drops writes inside async_added_to_hass.
+        if coordinator.data is not None:
+            value = coordinator.data.timings.get(prayer)
+            if value is not None:
+                self._attr_native_value = value
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -138,7 +153,7 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
 # ---------------------------------------------------------------------------
 
 
-class SalahTimesNextPrayerSensor(SalahTimesEntity):
+class SalahTimesNextPrayerSensor(SalahTimesEntity, SensorEntity):
     """Represents the next upcoming obligatory prayer with countdown attributes."""
 
     def __init__(
@@ -151,6 +166,11 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity):
         super().__init__(coordinator, entry_id, name)
         self.entity_description = NextPrayerSensorDescription()
         self._attr_unique_id = f"{entry_id}-next_prayer"
+        # Seed initial state — same rationale as SalahTimesPrayerSensor;
+        # the coordinator's first refresh completes before entities exist.
+        next_time, _, _ = self._compute_next_prayer()
+        if next_time is not None:
+            self._attr_native_value = next_time
 
     def _compute_next_prayer(self) -> tuple[datetime | None, str | None, int | None]:
         """Compute the next upcoming obligatory prayer.

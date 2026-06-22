@@ -54,10 +54,14 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
         """Initialise the coordinator.
 
         Sets ``update_interval`` from the config entry's polling interval
-        option, and stores references to the API and config entry.  The
-        ``always_update=False`` flag combined with ``PrayerTimes.__eq__``
-        (which ignores the ``provider`` field) avoids unnecessary state
-        writes when switching between providers produces identical times.
+        option, and stores references to the API and config entry.
+
+        ``always_update=True`` (the default) guarantees that every refresh
+        notifies entity listeners, which ensures sensors always recompute
+        their state from the latest coordinator data.  This is important
+        because sensor state is read from ``native_value`` through the
+        ``state`` property; without the listener firing, stale "unknown"
+        state persists.
 
         Args:
             hass: The Home Assistant instance.
@@ -78,7 +82,7 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
             name=DOMAIN,
             config_entry=config_entry,
             update_interval=update_interval,
-            always_update=False,
+            always_update=True,
         )
         self._api = api
         self._config_entry = config_entry

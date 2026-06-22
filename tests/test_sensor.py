@@ -64,6 +64,38 @@ class TestPrayerSensors:
         expected = mock_coordinator.data.timings[prayer]
         assert sensor._attr_native_value == expected
 
+    async def test_prayer_sensor_init_seeds_native_value(
+        self,
+        hass: HomeAssistant,
+        mock_coordinator,
+        mock_config_entry,
+    ) -> None:
+        """Test that __init__ seeds _attr_native_value from coordinator data.
+
+        The coordinator's first refresh completes *before* entity creation,
+        so the prayer timestamp sensor's ``__init__`` should pick up the
+        correct value immediately.  This ensures the very first state write
+        in ``add_to_platform_finish`` produces a valid timestamp rather than
+        "unknown".
+
+        Note: we cannot call ``sensor.state`` here because ``SensorEntity.state``
+        requires platform registration (accesses ``_unit_of_measurement_translation_key``
+        which raises before the entity is added to HA). The critical assertion
+        is that ``_attr_native_value`` is correctly seeded.
+        """
+        description = next(
+            d for d in PRAYER_SENSORS if d.key == PrayerName.FAJR.value
+        )
+        sensor = SalahTimesPrayerSensor(
+            coordinator=mock_coordinator,
+            entry_id=mock_config_entry.entry_id,
+            name=mock_config_entry.title,
+            description=description,
+            prayer=PrayerName.FAJR,
+        )
+        expected = mock_coordinator.data.timings[PrayerName.FAJR]
+        assert sensor._attr_native_value == expected
+
 
 class TestNextPrayerSensor:
     """Tests for the next prayer countdown sensor."""
@@ -185,6 +217,45 @@ class TestNextPrayerSensor:
         assert any(
             e.unique_id == expected_uid for e in entities
         ), f"Missing entity with unique_id {expected_uid}"
+
+    async def test_next_prayer_init_seeds_native_value(
+        self,
+        hass: HomeAssistant,
+        mock_coordinator,
+        mock_config_entry,
+    ) -> None:
+        """Test that __init__ seeds _attr_native_value from coordinator data.
+
+        Sets the coordinator data to have all prayers in the future so
+        ``_compute_next_prayer`` finds a valid next prayer regardless of
+        the current wall-clock time.
+        """
+        now = dt_util.utcnow()
+        mock_coordinator.data = PrayerTimes(
+            date=now.date(),
+            timings={
+                PrayerName.FAJR: now + timedelta(hours=1),
+                PrayerName.DHUHR: now + timedelta(hours=4),
+                PrayerName.ASR: now + timedelta(hours=7),
+                PrayerName.MAGHRIB: now + timedelta(hours=10),
+                PrayerName.ISHA: now + timedelta(hours=13),
+            },
+            hijri_date="05-01-1448",
+            hijri_month="Muharram",
+            hijri_year=1448,
+            hijri_holidays=["Islamic New Year"],
+            calculation_method="ISNA",
+            provider="aladhan",
+        )
+
+        sensor = SalahTimesNextPrayerSensor(
+            coordinator=mock_coordinator,
+            entry_id=mock_config_entry.entry_id,
+            name=mock_config_entry.title,
+        )
+        assert sensor._attr_native_value is not None, (
+            "Next-prayer sensor should have a value after init"
+        )
 
     async def test_next_prayer_all_passed(
         self,
