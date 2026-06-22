@@ -273,49 +273,35 @@ async def _auto_unload_loaded_entries(
 ) -> AsyncGenerator[None, None]:
     """Unload any still-LOADED config entries after each test runs.
 
-    Belt-and-suspenders cleanup:
+    The integration's only async resource that survives a test is the
+    midnight-refresh wall-clock listener on the coordinator.  Cancelling
+    that listener is enough to keep the framework's lingering-timer
+    check happy, and avoids the executor-shutdown side effects that
+    calling ``hass.config_entries.async_unload`` can trigger (a
+    ``_run_safe_shutdown_loop`` daemon thread is flagged as a leak
+    by the framework's thread check).
 
-    1. Iterate ``hass.config_entries.async_entries(DOMAIN)`` and unload
-       each LOADED entry (which fires ``entry.async_on_unload``
-       callbacks, including ``coordinator.async_unload``).
-    2. Also call ``coordinator.async_unload()`` directly via
-       ``entry.runtime_data`` in case the entry's ``async_on_unload``
-       wiring wasn't triggered (newer
-       ``pytest-homeassistant-custom-component`` auto-setup paths
-       sometimes don't fire it).
-    3. Walk ``SalahTimesCoordinator._all_instances`` and call
-       ``async_unload`` on every coordinator created during the test.
-       This is the most reliable way to cancel the midnight-refresh
-       listener on coordinators the test never bound to a config entry
-       (e.g. those auto-created by the config-flow framework).
-
-    ``coordinator.async_unload`` is idempotent, so calling it on a
-    coordinator that's already been cleaned up via the entry path is
-    a harmless no-op.
-
-    A trailing ``async_block_till_done`` flushes short-lived timers
-    (e.g. ``DataUpdateCoordinator``'s debouncer) before the
-    framework's lingering-timer check runs.
+    We walk ``SalahTimesCoordinator._all_instances`` and call
+    ``async_unload`` on every coordinator created during the test.
+    This is the most reliable way to reach the midnight-refresh
+    listener on coordinators the test never bound to a config entry
+    (e.g. those auto-created by the config-flow framework in newer
+    ``pytest-homeassistant-custom-component``, where
+    ``entry.runtime_data`` isn't populated yet at cleanup time).
     """
     yield
 
-    # (1) and (2): unload via the entry, then via runtime_data.
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        coordinator = getattr(entry, "runtime_data", None)
-        if coordinator is not None and hasattr(coordinator, "async_unload"):
-            await coordinator.async_unload()
-        if entry.state is ConfigEntryState.LOADED:
-            await hass.config_entries.async_unload(entry.entry_id)
-            await hass.async_block_till_done()
-
-    # (3): unload every coordinator instance that was created during
-    # the test, regardless of how the test got hold of it.  This is
-    # the catch-all that solves the config-flow test failures.
+    # Walk the class-level registry and cancel every coordinator's
+    # midnight-refresh listener.  This is sufficient to satisfy the
+    # lingering-timer check without triggering the entry-unload path
+    # that spawns the _run_safe_shutdown_loop thread.
     instances = list(SalahTimesCoordinator._all_instances)
     for coordinator in instances:
         await coordinator.async_unload()
     # Drop them so the next test starts with a clean registry.
     SalahTimesCoordinator._all_instances.clear()
 
-    # Flush any remaining short-lived timers.
+    # Flush any remaining short-lived timers (e.g. DataUpdateCoordinator's
+    # internal debouncer) so they don't trip the framework's
+    # lingering-timer check.
     await hass.async_block_till_done()
