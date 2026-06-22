@@ -45,6 +45,47 @@
       "already_configured": "A Salah Times entry for this location already exists."
     }
   },
+  "entity": {
+    "sensor": {
+      "fajr": {
+        "name": "Fajr"
+      },
+      "sunrise": {
+        "name": "Sunrise"
+      },
+      "dhuhr": {
+        "name": "Dhuhr"
+      },
+      "asr": {
+        "name": "Asr"
+      },
+      "maghrib": {
+        "name": "Maghrib"
+      },
+      "isha": {
+        "name": "Isha"
+      },
+      "imsak": {
+        "name": "Imsak"
+      },
+      "midnight": {
+        "name": "Midnight"
+      },
+      "next_prayer": {
+        "name": "Next Prayer"
+      }
+    },
+    "calendar": {
+      "prayer_schedule": {
+        "name": "Prayer Schedule"
+      }
+    },
+    "button": {
+      "refresh": {
+        "name": "Refresh"
+      }
+    }
+  },
   "selector": {
     "calculation_method": {
       "options": {
