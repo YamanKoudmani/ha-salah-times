@@ -13,14 +13,14 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.util import dt as dt_util
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import SalahTimesCoordinator
 from .entity import SalahTimesEntity
-from .models import PRAYER_ORDER, PrayerName
+from .models import PRAYER_ORDER, PrayerName, PrayerTimes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -109,15 +109,7 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
         description: SensorEntityDescription,
         prayer: PrayerName,
     ) -> None:
-        """Initialise the prayer timestamp sensor.
-
-        Args:
-            coordinator: The data coordinator.
-            entry_id: Config entry ID for unique_id prefix.
-            name: Location name for device info.
-            description: Sensor entity description.
-            prayer: Which prayer this sensor tracks.
-        """
+        """Initialise the prayer timestamp sensor."""
         super().__init__(coordinator, entry_id, name)
         self.entity_description = description
         self._prayer = prayer
@@ -125,24 +117,31 @@ class SalahTimesPrayerSensor(SalahTimesEntity):
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the UTC datetime of this prayer time.
-
-        Returns the timezone-aware UTC datetime from coordinator.data.timings.
-        Returns None if the coordinator has not yet fetched data.
-        """
+        """Return the UTC datetime of this prayer time."""
         if self.coordinator.data is None:
-            _LOGGER.debug("native_value: coordinator.data is None for %s", self._prayer)
             return None
-        timings = self.coordinator.data.timings
-        value = timings.get(self._prayer)
+        value = self.coordinator.data.timings.get(self._prayer)
         _LOGGER.debug(
-            "native_value: prayer=%s value=%s type=%s timings_keys=%s",
+            "Prayer sensor %s: value=%s type=%s",
             self._prayer,
             value,
-            type(value).__name__,
-            list(timings.keys()),
+            type(value).__name__ if value else "None",
         )
         return value
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator.
+
+        Sets ``_attr_native_value`` directly so HA's state machine
+        picks it up, then writes the state.
+        """
+        data: PrayerTimes | None = self.coordinator.data
+        if data is not None:
+            self._attr_native_value = data.timings.get(self._prayer)
+        else:
+            self._attr_native_value = None
+        self.async_write_ha_state()
 
 
 # ---------------------------------------------------------------------------
@@ -159,66 +158,44 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity):
         entry_id: str,
         name: str,
     ) -> None:
-        """Initialise the next prayer sensor.
-
-        Args:
-            coordinator: The data coordinator.
-            entry_id: Config entry ID for unique_id prefix.
-            name: Location name for device info.
-        """
+        """Initialise the next prayer sensor."""
         super().__init__(coordinator, entry_id, name)
         self.entity_description = NextPrayerSensorDescription()
         self._attr_unique_id = f"{entry_id}-next_prayer"
 
-    @property
-    def native_value(self) -> datetime | None:
-        """Return the UTC datetime of the next upcoming obligatory prayer.
+    def _compute_next_prayer(self) -> tuple[datetime | None, str | None, int | None]:
+        """Compute the next upcoming obligatory prayer.
 
-        Only considers the 5 obligatory prayers (Fajr, Dhuhr, Asr, Maghrib, Isha).
-        Returns None if all today's prayers have passed (the next poll will pick
-        up the following day's times).
+        Returns:
+            Tuple of (next_time, prayer_name, time_remaining_seconds).
         """
-        if self.coordinator.data is None:
-            return None
+        data: PrayerTimes | None = self.coordinator.data
+        if data is None:
+            return None, None, None
+
         now = dt_util.utcnow()
-        timings = self.coordinator.data.timings
-        for prayer in PRAYER_ORDER:
-            prayer_time = timings.get(prayer)
-            if prayer_time is not None and prayer_time > now:
-                return prayer_time
-        return None
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return extra state attributes.
-
-        Attributes:
-            prayer: Name of the next prayer (e.g. "maghrib").
-            time_remaining: Seconds until that prayer.
-            hijri_date: Hijri date string.
-            hijri_holidays: List of Islamic holidays.
-            calculation_method: Name of the calculation method used.
-            provider: "aladhan" or "islamic_app".
-        """
-        if self.coordinator.data is None:
-            return {}
-
-        data = self.coordinator.data
-        now = dt_util.utcnow()
-
-        next_time: datetime | None = None
-        next_prayer_name: str | None = None
-
         for prayer in PRAYER_ORDER:
             prayer_time = data.timings.get(prayer)
             if prayer_time is not None and prayer_time > now:
-                next_time = prayer_time
-                next_prayer_name = prayer.value
-                break
+                remaining = int((prayer_time - now).total_seconds())
+                return prayer_time, prayer.value, remaining
 
-        time_remaining: int | None = None
-        if next_time is not None:
-            time_remaining = int((next_time - now).total_seconds())
+        return None, None, None
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the UTC datetime of the next upcoming obligatory prayer."""
+        next_time, _, _ = self._compute_next_prayer()
+        return next_time
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return extra state attributes."""
+        data: PrayerTimes | None = self.coordinator.data
+        if data is None:
+            return {}
+
+        next_time, next_prayer_name, time_remaining = self._compute_next_prayer()
 
         return {
             "prayer": next_prayer_name,
@@ -228,6 +205,37 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity):
             "calculation_method": data.calculation_method,
             "provider": data.provider,
         }
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Handle updated data from the coordinator.
+
+        Sets ``_attr_native_value`` and ``_attr_extra_state_attributes``
+        directly so HA's state machine picks them up.
+        """
+        next_time, next_prayer_name, time_remaining = self._compute_next_prayer()
+        data: PrayerTimes | None = self.coordinator.data
+
+        _LOGGER.debug(
+            "Next prayer: name=%s time=%s remaining=%s",
+            next_prayer_name,
+            next_time,
+            time_remaining,
+        )
+
+        self._attr_native_value = next_time
+        if data is not None:
+            self._attr_extra_state_attributes = {
+                "prayer": next_prayer_name,
+                "time_remaining": time_remaining,
+                "hijri_date": data.hijri_date,
+                "hijri_holidays": data.hijri_holidays,
+                "calculation_method": data.calculation_method,
+                "provider": data.provider,
+            }
+        else:
+            self._attr_extra_state_attributes = None
+        self.async_write_ha_state()
 
 
 # ---------------------------------------------------------------------------
@@ -243,11 +251,6 @@ async def async_setup_entry(
     """Set up Salah Times sensors from a config entry.
 
     Creates 8 prayer timestamp sensors and 1 next-prayer sensor.
-
-    Args:
-        hass: The HomeAssistant instance.
-        entry: The config entry for this location.
-        async_add_entities: Callback to add entities.
     """
     coordinator: SalahTimesCoordinator = entry.runtime_data
 
