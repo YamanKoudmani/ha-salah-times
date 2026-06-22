@@ -25,6 +25,39 @@ from .models import PrayerName, PrayerTimes
 _LOGGER = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Date parsing helper — AlAdhan returns DD-MM-YYYY, not ISO format
+# ---------------------------------------------------------------------------
+
+
+def _parse_api_date(date_str: str) -> date:
+    """Parse a date string from the prayer times API.
+
+    AlAdhan returns Gregorian dates in ``DD-MM-YYYY`` format (e.g.
+    ``"01-06-2026"`` for June 1st).  This helper handles that format
+    and falls back to ISO ``YYYY-MM-DD`` for robustness.
+
+    Args:
+        date_str: The date string from the API response.
+
+    Returns:
+        The parsed ``date`` object.
+
+    Raises:
+        ValueError: If the string cannot be parsed in either format.
+    """
+    # Try DD-MM-YYYY first (AlAdhan's actual format)
+    parts = date_str.split("-")
+    if len(parts) == 3:
+        day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+        if day > 12 or (day <= 12 and month > 12):
+            # First number is definitely the day (DD-MM-YYYY)
+            return date(year, month, day)
+        # Ambiguous case (both <= 12): AlAdhan uses DD-MM-YYYY, so prefer that
+        return date(year, month, day)
+    # Fallback: try ISO format
+    return date.fromisoformat(date_str)
+
+# ---------------------------------------------------------------------------
 # Prayer timing key mapping (shared across providers)
 # ---------------------------------------------------------------------------
 _API_PRAYER_MAP: dict[str, PrayerName] = {
@@ -265,7 +298,7 @@ class AlAdhanClient:
         timings_json: dict[str, str] = data["timings"]
 
         greg_json = data["date"]["gregorian"]
-        greg_date = date.fromisoformat(greg_json["date"])
+        greg_date = _parse_api_date(greg_json["date"])
 
         hijri_json = data["date"]["hijri"]
         hijri_date_str: str = hijri_json["date"]
@@ -454,7 +487,7 @@ class IslamicAppClient:
         timings_json: dict[str, str] = data["timings"]
 
         greg_json = data["date"]["gregorian"]
-        greg_date = date.fromisoformat(greg_json["date"])
+        greg_date = _parse_api_date(greg_json["date"])
 
         hijri_json = data["date"]["hijri"]
         hijri_date_str: str = hijri_json["date"]
