@@ -22,10 +22,11 @@ if sys.platform == "win32":
 
 from datetime import date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 from unittest.mock import AsyncMock
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -224,16 +225,55 @@ async def mock_coordinator(
     The coordinator is wired with mocked API clients so no network calls
     are made.  Both ``coordinator.data`` and ``last_update_success`` are
     set manually for unit-test convenience.
+
+    The midnight refresh listener is disabled here (``enable_midnight_refresh=False``)
+    because this fixture backs tests that don't exercise the listener and
+    pytest-homeassistant-custom-component's lingering-timer check would
+    otherwise flag the test.  Tests that specifically cover the listener
+    instantiate ``SalahTimesCoordinator`` directly with the default
+    ``enable_midnight_refresh=True`` and call :meth:`async_unload` to
+    clean up.
     """
     api = SalahTimesAPI(
         primary=mock_aladhan_client,
         fallback=mock_islamic_app_client,
         enable_failover=True,
     )
-    coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+    coordinator = SalahTimesCoordinator(
+        hass,
+        mock_config_entry,
+        api,
+        enable_midnight_refresh=False,
+    )
     coordinator.data = _create_prayer_times("aladhan")
     coordinator.last_update_success = True
     coordinator._month_cache = {
         date.today(): _create_prayer_times("aladhan"),
     }
     return coordinator
+
+
+# ---------------------------------------------------------------------------
+# Autouse cleanup: unload any still-LOADED config entries after each test
+# ---------------------------------------------------------------------------
+# Some tests (notably config-flow tests) drive HA through to a fully
+# ``LOADED`` entry without explicitly unloading it.  The coordinator's
+# midnight-refresh listener is wired to ``entry.async_on_unload`` in
+# ``__init__.py``, so unloading the entry releases the listener — which
+# is what ``pytest-homeassistant-custom-component``'s lingering-timer
+# check requires.  This autouse fixture catches every test that forgets
+# to unload, so we don't get a CI failure every time a new test is added
+# that creates an entry via the config flow.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+async def _auto_unload_loaded_entries(
+    hass: HomeAssistant,
+) -> AsyncGenerator[None, None]:
+    """Unload any still-LOADED config entries after each test runs."""
+    yield
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.state is ConfigEntryState.LOADED:
+            await hass.config_entries.async_unload(entry.entry_id)
+            await hass.async_block_till_done()

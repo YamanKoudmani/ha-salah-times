@@ -51,6 +51,8 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
         hass: HomeAssistant,
         config_entry: ConfigEntry,
         api: SalahTimesAPI,
+        *,
+        enable_midnight_refresh: bool = True,
     ) -> None:
         """Initialise the coordinator.
 
@@ -68,6 +70,14 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
             hass: The Home Assistant instance.
             config_entry: The config entry for this location.
             api: The ``SalahTimesAPI`` wrapper (with failover) to use.
+            enable_midnight_refresh: When ``True`` (the default) the
+                coordinator registers a wall-clock listener on local
+                00:00:00 that triggers a refresh at every midnight,
+                independent of the polling interval.  Set to ``False``
+                in unit tests that don't need (or can't clean up) the
+                listener — bypassing it keeps the test framework's
+                lingering-timer check happy.  Production callers should
+                leave this at its default.
         """
         update_interval = timedelta(
             hours=int(
@@ -100,15 +110,21 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
         # ``async_track_time_change`` returns a callable that cancels the
         # listener when invoked; it is stored so :meth:`async_unload` can
         # release it on entry teardown.
-        self._cancel_midnight_refresh: Callable[[], None] | None = (
-            async_track_time_change(
+        #
+        # The listener is opt-out (default on) so production setups always
+        # get the daily refresh.  Tests that instantiate the coordinator
+        # directly without going through entry setup should pass
+        # ``enable_midnight_refresh=False`` to avoid leaving a lingering
+        # timer behind.
+        self._cancel_midnight_refresh: Callable[[], None] | None = None
+        if enable_midnight_refresh:
+            self._cancel_midnight_refresh = async_track_time_change(
                 hass,
                 self._handle_midnight_refresh,
                 hour=0,
                 minute=0,
                 second=0,
             )
-        )
 
     # ------------------------------------------------------------------
     # Public property

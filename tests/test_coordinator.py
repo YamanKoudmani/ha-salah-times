@@ -35,7 +35,9 @@ class TestCoordinator:
             fallback=None,
             enable_failover=False,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
         result = await coordinator._async_update_data()
 
         assert isinstance(result, PrayerTimes)
@@ -58,7 +60,9 @@ class TestCoordinator:
             fallback=mock_islamic_app_client,
             enable_failover=True,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
         result = await coordinator._async_update_data()
 
         assert isinstance(result, PrayerTimes)
@@ -84,7 +88,9 @@ class TestCoordinator:
             fallback=mock_islamic_app_client,
             enable_failover=True,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
 
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
@@ -106,7 +112,9 @@ class TestCoordinator:
             fallback=mock_islamic_app_client,
             enable_failover=True,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
         result = await coordinator._async_update_data()
 
         assert result.provider == "islamic_app"
@@ -127,7 +135,9 @@ class TestCoordinator:
             fallback=None,
             enable_failover=False,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
 
         # Seed the cache with an entry from last month
         coordinator._month_cache = {
@@ -174,7 +184,9 @@ class TestCoordinator:
             fallback=None,
             enable_failover=True,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
         result = await coordinator._async_update_data()
 
         assert isinstance(result, PrayerTimes)
@@ -198,7 +210,9 @@ class TestCoordinator:
             fallback=mock_islamic_app_client,
             enable_failover=True,
         )
-        coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
+        coordinator = SalahTimesCoordinator(
+            hass, mock_config_entry, api, enable_midnight_refresh=False
+        )
 
         with pytest.raises(UpdateFailed):
             await coordinator._async_update_data()
@@ -254,6 +268,8 @@ class TestMidnightRefresh:
             fallback=None,
             enable_failover=False,
         )
+        # Default ``enable_midnight_refresh=True`` so the real listener is
+        # registered — this test specifically exercises the callback path.
         coordinator = SalahTimesCoordinator(hass, mock_config_entry, api)
 
         # Replace async_request_refresh with an AsyncMock so we can
@@ -263,6 +279,10 @@ class TestMidnightRefresh:
         await coordinator._handle_midnight_refresh(datetime.now())
 
         coordinator.async_request_refresh.assert_awaited_once()
+
+        # Tear the listener down so the framework's lingering-timer
+        # check stays happy.
+        await coordinator.async_unload()
 
     async def test_midnight_listener_works_with_long_polling_interval(
         self,
