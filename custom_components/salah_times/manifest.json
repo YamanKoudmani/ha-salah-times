@@ -1,0 +1,13 @@
+{
+  "domain": "salah_times",
+  "name": "Salah Times",
+  "codeowners": ["@YamanKoudmani"],
+  "config_flow": true,
+  "documentation": "https://github.com/YamanKoudmani/ha-salah-times",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/YamanKoudmani/ha-salah-times/issues",
+  "quality_scale": "silver",
+  "requirements": [],
+  "version": "2026.6.0"
+}

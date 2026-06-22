@@ -1,0 +1,92 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Salah Times — Add Location",
+        "description": "Enter a name and location for this prayer times entry.",
+        "data": {
+          "name": "Location Name",
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        }
+      },
+      "reconfigure": {
+        "title": "Salah Times — Update Location",
+        "description": "Update the name or coordinates for this prayer times entry.",
+        "data": {
+          "name": "Location Name",
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        }
+      }
+    },
+    "options": {
+      "step": {
+        "options": {
+          "title": "Salah Times — Configuration",
+          "description": "Adjust calculation method, school, and other settings.",
+          "data": {
+            "calculation_method": "Calculation Method",
+            "school": "School (affects Asr time)",
+            "latitude_adjustment_method": "Latitude Adjustment Method",
+            "hijri_adjustment_days": "Hijri Date Adjustment (days)",
+            "polling_interval_hours": "Polling Interval (hours)",
+            "enable_failover": "Enable provider failover"
+          }
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the prayer times API. Please check your coordinates and try again.",
+      "invalid_coordinates": "The provided coordinates are not valid. Latitude must be between -90 and 90, longitude between -180 and 180.",
+      "already_configured": "This location already has a Salah Times entry."
+    },
+    "abort": {
+      "already_configured": "A Salah Times entry for this location already exists."
+    }
+  },
+  "selector": {
+    "calculation_method": {
+      "options": {
+        "0": "Jafari / Ithna Ashari",
+        "1": "University of Islamic Sciences, Karachi",
+        "2": "Islamic Society of North America (ISNA)",
+        "3": "Muslim World League (MWL)",
+        "4": "Umm Al-Qura University, Makkah",
+        "5": "Egyptian General Authority of Survey",
+        "7": "Institute of Geophysics, University of Tehran",
+        "8": "Gulf Region",
+        "9": "Kuwait",
+        "10": "Qatar",
+        "11": "Majlis Ugama Islam Singapura, Singapore",
+        "12": "Union Organization islamic de France (UOIF)",
+        "13": "Diyanet İşleri Başkanlığı, Turkey",
+        "14": "Spiritual Administration of Muslims of Russia",
+        "15": "Moonsighting Committee Worldwide (MCW)",
+        "16": "Dubai",
+        "17": "Jakim (Jabatan Kemajuan Islam Malaysia)",
+        "18": "Tunisia",
+        "19": "Algeria",
+        "20": "Kementerian Agama Republik Indonesia (KEMENAG)",
+        "21": "Morocco",
+        "22": "Comunidade Islâmica de Lisboa (CIL)",
+        "23": "Ministry of Awqaf, Islamic Affairs and Holy Places, Palestine",
+        "99": "Custom"
+      }
+    },
+    "school": {
+      "options": {
+        "0": "Shafi (Standard)",
+        "1": "Hanafi"
+      }
+    },
+    "latitude_adjustment_method": {
+      "options": {
+        "0": "Middle of the Night",
+        "1": "One Seventh of the Night",
+        "2": "Angle-Based",
+        "3": "Angle-Based (AlAdhan default)"
+      }
+    }
+  }
+}

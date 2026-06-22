@@ -1,0 +1,42 @@
+{
+  "entity": {
+    "sensor": {
+      "salah_times": {
+        "fajr": {
+          "default": "mdi:weather-sunny"
+        },
+        "sunrise": {
+          "default": "mdi:weather-sunset-up"
+        },
+        "dhuhr": {
+          "default": "mdi:weather-sunny-alert"
+        },
+        "asr": {
+          "default": "mdi:weather-sunny"
+        },
+        "maghrib": {
+          "default": "mdi:weather-sunset-down"
+        },
+        "isha": {
+          "default": "mdi:weather-night"
+        },
+        "imsak": {
+          "default": "mdi:weather-night-partly-cloudy"
+        },
+        "midnight": {
+          "default": "mdi:weather-night"
+        },
+        "next_prayer": {
+          "default": "mdi:bell-ring"
+        }
+      }
+    },
+    "calendar": {
+      "salah_times": {
+        "prayer_schedule": {
+          "default": "mdi:calendar-text"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Service definitions for Salah Times integration.
+
+refresh:
+  name: Refresh prayer times
+  description: >
+    Force an immediate refresh of prayer times for one or all
+    Salah Times entries, bypassing the normal polling interval.
+  target:
+    entity:
+      integration: salah_times
+      domain: sensor
+  fields: {}

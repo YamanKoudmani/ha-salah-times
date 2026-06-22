@@ -1,0 +1,10 @@
+{
+  "name": "Salah Times",
+  "homeassistant": "2025.6.0",
+  "hide_default_branch": true,
+  "content_in_root": false,
+  "render_readme": true,
+  "country": ["US", "GB", "SA", "AE", "MY", "ID", "PK", "IN", "BD", "TR", "EG"],
+  "zip_release": true,
+  "filename": "salah_times.zip"
+}
