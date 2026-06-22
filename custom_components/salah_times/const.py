@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Final
 
 DOMAIN: Final = "salah_times"
+ICON: Final = "mdi:mosque"
 
 # ---------------------------------------------------------------------------
 # Config flow — entry.data keys (persistent, require reconfigure to change)

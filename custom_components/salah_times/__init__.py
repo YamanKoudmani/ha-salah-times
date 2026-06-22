@@ -21,6 +21,7 @@ from .const import (
     DEFAULT_ENABLE_FAILOVER,
     DEFAULT_POLLING_INTERVAL_HOURS,
     DOMAIN,
+    ICON,
     SERVICE_REFRESH,
 )
 from .coordinator import SalahTimesCoordinator

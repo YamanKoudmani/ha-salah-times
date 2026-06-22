@@ -26,7 +26,9 @@ _LOGGER = logging.getLogger(__name__)
 
 DEBUG_REFRESH_DESCRIPTION = ButtonEntityDescription(
     key="refresh",
+    name="Refresh",
     translation_key="refresh",
+    icon="mdi:refresh",
     entity_category=EntityCategory.DIAGNOSTIC,
     entity_registry_enabled_default=False,
 )

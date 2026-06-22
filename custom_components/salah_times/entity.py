@@ -10,7 +10,7 @@ from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN
+from .const import DOMAIN, ICON
 from .coordinator import SalahTimesCoordinator
 
 
@@ -24,6 +24,7 @@ class SalahTimesEntity(CoordinatorEntity[SalahTimesCoordinator]):
     """
 
     _attr_has_entity_name = True
+    _attr_icon = ICON
 
     def __init__(
         self,

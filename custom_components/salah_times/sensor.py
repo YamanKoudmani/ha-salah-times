@@ -34,49 +34,65 @@ _LOGGER = logging.getLogger(__name__)
 PRAYER_SENSORS: tuple[SensorEntityDescription, ...] = (
     SensorEntityDescription(
         key=PrayerName.FAJR.value,
+        name="Fajr",
         translation_key="fajr",
+        icon="mdi:weather-sunny",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=True,
     ),
     SensorEntityDescription(
         key=PrayerName.SUNRISE.value,
+        name="Sunrise",
         translation_key="sunrise",
+        icon="mdi:weather-sunset-up",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=False,
     ),
     SensorEntityDescription(
         key=PrayerName.DHUHR.value,
+        name="Dhuhr",
         translation_key="dhuhr",
+        icon="mdi:weather-sunny-alert",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=True,
     ),
     SensorEntityDescription(
         key=PrayerName.ASR.value,
+        name="Asr",
         translation_key="asr",
+        icon="mdi:weather-sunny",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=True,
     ),
     SensorEntityDescription(
         key=PrayerName.MAGHRIB.value,
+        name="Maghrib",
         translation_key="maghrib",
+        icon="mdi:weather-sunset-down",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=True,
     ),
     SensorEntityDescription(
         key=PrayerName.ISHA.value,
+        name="Isha",
         translation_key="isha",
+        icon="mdi:weather-night",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=True,
     ),
     SensorEntityDescription(
         key=PrayerName.IMSAK.value,
+        name="Imsak",
         translation_key="imsak",
+        icon="mdi:weather-night-partly-cloudy",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=False,
     ),
     SensorEntityDescription(
         key=PrayerName.MIDNIGHT.value,
+        name="Midnight",
         translation_key="midnight",
+        icon="mdi:weather-night",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_registry_enabled_default=False,
     ),
@@ -93,7 +109,9 @@ class NextPrayerSensorDescription(SensorEntityDescription):
     """Sensor description for the next-prayer sensor with extra attributes."""
 
     key: str = "next_prayer"
+    name: str = "Next Prayer"
     translation_key: str = "next_prayer"
+    icon: str = "mdi:bell-ring"
     device_class: SensorDeviceClass = SensorDeviceClass.TIMESTAMP
 
 

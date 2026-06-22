@@ -31,6 +31,8 @@ class SalahCalendarEntity(SalahTimesEntity, CalendarEntity):
     """
 
     _attr_translation_key = "prayer_schedule"
+    _attr_name = "Prayer Schedule"
+    _attr_icon = "mdi:calendar-text"
 
     def __init__(
         self,

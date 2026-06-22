@@ -1,6 +1,7 @@
 {
   "domain": "salah_times",
   "name": "Salah Times",
+  "icon": "brand/icon.png",
   "codeowners": ["@YamanKoudmani"],
   "config_flow": true,
   "documentation": "https://github.com/YamanKoudmani/ha-salah-times",
@@ -9,5 +10,5 @@
   "issue_tracker": "https://github.com/YamanKoudmani/ha-salah-times/issues",
   "quality_scale": "silver",
   "requirements": [],
-  "version": "0.1.3"
+  "version": "0.1.4"
 }
