@@ -291,6 +291,11 @@ async def _auto_unload_loaded_entries(
     """
     yield
 
+    # Drain any pending tasks first so the executor is idle when the
+    # test framework's verify_cleanup shuts it down (avoids the
+    # _run_safe_shutdown_loop daemon thread being flagged as lingering).
+    await hass.async_block_till_done()
+
     # Walk the class-level registry and cancel every coordinator's
     # midnight-refresh listener.  This is sufficient to satisfy the
     # lingering-timer check without triggering the entry-unload path
