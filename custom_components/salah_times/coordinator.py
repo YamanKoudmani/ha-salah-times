@@ -46,6 +46,18 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
     Caches the current month's daily prayer data for the calendar entity.
     """
 
+    # Class-level registry of every coordinator instance ever created.
+    # Populated in :meth:`__init__` and consumed by the test suite's
+    # autouse cleanup fixture, which iterates the list and calls
+    # :meth:`async_unload` on every instance after each test.  This
+    # gives the test fixture a reliable way to reach the midnight-
+    # refresh listener on coordinators that the test didn't bind to a
+    # config entry (e.g. the ones auto-created by the config-flow
+    # framework in newer ``pytest-homeassistant-custom-component``
+    # versions, where ``entry.runtime_data`` is not yet populated
+    # when the cleanup fixture runs).
+    _all_instances: list[SalahTimesCoordinator] = []
+
     def __init__(
         self,
         hass: HomeAssistant,
@@ -125,6 +137,10 @@ class SalahTimesCoordinator(DataUpdateCoordinator[PrayerTimes]):
                 minute=0,
                 second=0,
             )
+
+        # Register this instance for test-suite cleanup.  See the
+        # class-level docstring for the rationale.
+        SalahTimesCoordinator._all_instances.append(self)
 
     # ------------------------------------------------------------------
     # Public property

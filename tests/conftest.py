@@ -273,85 +273,49 @@ async def _auto_unload_loaded_entries(
 ) -> AsyncGenerator[None, None]:
     """Unload any still-LOADED config entries after each test runs.
 
-    Belt-and-suspenders: we both unload the entry (which fires
-    ``entry.async_on_unload`` callbacks and should cancel the midnight
-    listener) **and** call ``coordinator.async_unload()`` directly via
-    ``entry.runtime_data``.  The direct call is needed because some
-    test paths in newer ``pytest-homeassistant-custom-component``
-    versions set up the entry through a code path that doesn't always
-    trigger the ``async_on_unload`` callbacks the integration
-    registered, leaving the wall-clock timer registered in the event
-    loop and tripping the framework's lingering-timer check.
+    Belt-and-suspenders cleanup:
 
-    ``coordinator.async_unload`` is idempotent, so calling it after a
-    successful entry unload is a harmless no-op.
+    1. Iterate ``hass.config_entries.async_entries(DOMAIN)`` and unload
+       each LOADED entry (which fires ``entry.async_on_unload``
+       callbacks, including ``coordinator.async_unload``).
+    2. Also call ``coordinator.async_unload()`` directly via
+       ``entry.runtime_data`` in case the entry's ``async_on_unload``
+       wiring wasn't triggered (newer
+       ``pytest-homeassistant-custom-component`` auto-setup paths
+       sometimes don't fire it).
+    3. Walk ``SalahTimesCoordinator._all_instances`` and call
+       ``async_unload`` on every coordinator created during the test.
+       This is the most reliable way to cancel the midnight-refresh
+       listener on coordinators the test never bound to a config entry
+       (e.g. those auto-created by the config-flow framework).
 
-    A final ``async_block_till_done`` flushes any short-lived timers
-    scheduled by helpers like ``DataUpdateCoordinator``'s debouncer
-    (used in tests that call ``async_request_refresh`` directly, e.g.
-    the debug-refresh button tests) before the framework's lingering
-    timer check runs.
+    ``coordinator.async_unload`` is idempotent, so calling it on a
+    coordinator that's already been cleaned up via the entry path is
+    a harmless no-op.
 
-    As a last resort, scan the event loop for any
-    ``_TrackPointUTCTime`` handles whose job targets
-    ``SalahTimesCoordinator._handle_midnight_refresh`` and cancel
-    them.  This catches timers whose owner we can't otherwise reach
-    (e.g. the config-flow auto-setup path in newer plugin versions
-    where ``entry.runtime_data`` isn't populated yet when this
-    fixture runs).
+    A trailing ``async_block_till_done`` flushes short-lived timers
+    (e.g. ``DataUpdateCoordinator``'s debouncer) before the
+    framework's lingering-timer check runs.
     """
     yield
+
+    # (1) and (2): unload via the entry, then via runtime_data.
     for entry in hass.config_entries.async_entries(DOMAIN):
-        # Direct cleanup first: the coordinator's runtime_data holds the
-        # midnight-refresh cancel callback.  Cancelling it here is the
-        # most reliable way to release the lingering _TrackPointUTCTime
-        # timer regardless of how the entry was set up.
         coordinator = getattr(entry, "runtime_data", None)
         if coordinator is not None and hasattr(coordinator, "async_unload"):
             await coordinator.async_unload()
-
-        # Then unload the entry itself so the framework releases any
-        # other resources tied to it (forwarded platforms, runtime data,
-        # etc.).
         if entry.state is ConfigEntryState.LOADED:
             await hass.config_entries.async_unload(entry.entry_id)
             await hass.async_block_till_done()
 
-    # Flush any short-lived timers (e.g. DataUpdateCoordinator's
-    # internal debouncer used by async_request_refresh) so they don't
-    # trip the framework's lingering-timer check on tests that don't
-    # go through the entry lifecycle.
-    await hass.async_block_till_done()
+    # (3): unload every coordinator instance that was created during
+    # the test, regardless of how the test got hold of it.  This is
+    # the catch-all that solves the config-flow test failures.
+    instances = list(SalahTimesCoordinator._all_instances)
+    for coordinator in instances:
+        await coordinator.async_unload()
+    # Drop them so the next test starts with a clean registry.
+    SalahTimesCoordinator._all_instances.clear()
 
-    # Last-resort sweep: cancel any _TrackPointUTCTime handles still
-    # scheduled in the event loop that belong to
-    # SalahTimesCoordinator._handle_midnight_refresh.  This handles
-    # the config-flow tests where the auto-setup path in newer
-    # pytest-homeassistant-custom-component doesn't expose the
-    # coordinator to us via entry.runtime_data.
-    try:
-        loop = hass.loop
-        # asyncio handles aren't easily iterable; iterate the
-        # scheduled list via the private _scheduled attribute if
-        # available, otherwise fall back to cancelling the whole
-        # default executor.  We try the safe path first.
-        handles = getattr(loop, "_scheduled", None) or []
-        for handle in list(handles):
-            callback = getattr(handle, "_callback", None) or getattr(
-                handle, "callback", None
-            )
-            if callback is None:
-                continue
-            # The handle's callback may be wrapped; unwrap one level
-            # to look at the underlying call.
-            inner = getattr(callback, "__self__", None) or getattr(
-                callback, "func", None
-            )
-            method_name = getattr(callback, "__name__", "") or ""
-            if (
-                method_name == "_handle_midnight_refresh"
-                or (inner is not None and getattr(inner, "__name__", "") == "_handle_midnight_refresh")
-            ):
-                handle.cancel()
-    except Exception:  # noqa: BLE001 - best-effort cleanup, never fail the test
-        pass
+    # Flush any remaining short-lived timers.
+    await hass.async_block_till_done()
