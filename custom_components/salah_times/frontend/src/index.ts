@@ -15,6 +15,6 @@ if (cardEl) {
     name: 'Salah Times',
     description:
       'A single cohesive prayer-times card for the Salah Times integration.',
-    preview: false,
+    preview: true,
   });
 }

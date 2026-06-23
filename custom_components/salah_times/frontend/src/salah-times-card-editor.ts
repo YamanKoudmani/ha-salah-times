@@ -3,7 +3,7 @@ import { customElement, property, state } from "lit/decorators.js";
 import type { SalahTimesConfig, HassLike } from "./types.js";
 
 const SCHEMA = [
-  { name: "entity", required: false, selector: { entity: { domain: ["sensor"] } } },
+  { name: "entity", required: false, selector: { entity: { domain: "sensor" } } },
   { name: "show_hijri", required: false, default: true, selector: { boolean: {} } },
   { name: "show_method", required: false, default: true, selector: { boolean: {} } },
   { name: "show_countdown", required: false, default: true, selector: { boolean: {} } },

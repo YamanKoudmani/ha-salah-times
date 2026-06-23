@@ -324,7 +324,7 @@ export class SalahTimesCard extends LitElement {
     if (!resolved) return null;
     const suffix = '_next_prayer';
     if (!resolved.endsWith(suffix)) return null;
-    return resolved.slice(0, resolved.length - suffix.length);
+    return resolved.slice(0, resolved.length - suffix.length) + '_';
   }
 
   /* ── Time-format helpers ── */
@@ -423,11 +423,38 @@ export class SalahTimesCard extends LitElement {
       const meta = PRAYER_META[key];
       if (!meta) continue;
 
-      // Look up the individual timestamp sensor for this prayer
-      const prayerEntityId = baseEntityId ? `${baseEntityId}${key}` : null;
-      const prayerState = prayerEntityId
-        ? this.hass.states[prayerEntityId]
-        : undefined;
+      // Resolve the prayer entity. The new format is `sensor.<loc>_<prayer>`
+      // (with underscore). The stale format from pre-v0.1.4 installs is
+      // `sensor.<loc><prayer>` (no underscore). Try the new format first,
+      // fall back to the stale one — auto-heals for users who haven't
+      // cleaned up their entity registry yet.
+      let prayerEntityId: string | null = null;
+      let prayerState:
+        | { state: string; attributes: Record<string, unknown> }
+        | undefined;
+
+      if (baseEntityId) {
+        const standardId = `${baseEntityId}${key}`;
+        const standardState = this.hass.states[standardId];
+        if (standardState) {
+          prayerEntityId = standardId;
+          prayerState = standardState;
+        } else {
+          // Strip the trailing underscore from the base to try the stale
+          // naming pattern. e.g. base `sensor.home_` -> `sensor.home`,
+          // then append `fajr` -> `sensor.homefajr`.
+          const staleBase = baseEntityId.endsWith('_')
+            ? baseEntityId.slice(0, -1)
+            : baseEntityId;
+          const staleId = `${staleBase}${key}`;
+          const staleState = this.hass.states[staleId];
+          if (staleState) {
+            prayerEntityId = staleId;
+            prayerState = staleState;
+          }
+        }
+      }
+
       const rawState = prayerState?.state;
       const tsIso =
         rawState && rawState !== 'unknown' && rawState !== 'unavailable'

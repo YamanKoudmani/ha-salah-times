@@ -81,4 +81,79 @@ describe('salah-times-card', () => {
       });
     });
   });
+
+  /* ── Multi-pattern entity lookup ── */
+
+  describe('entity lookup fallback', () => {
+    /**
+     * Build a mock hass with the given extra prayer entities.
+     * Always includes sensor.home_next_prayer so auto-discovery works.
+     */
+    function buildMockHass(
+      extra: Record<string, unknown>,
+    ): Record<string, unknown> {
+      const futureIso = new Date(Date.now() + 3600_000).toISOString();
+      return {
+        states: {
+          'sensor.home_next_prayer': {
+            state: futureIso,
+            attributes: { prayer: 'fajr', time_remaining: 3600 },
+          },
+          ...extra,
+        },
+        config: { time_zone: 'America/New_York' },
+        locale: { language: 'en' },
+      };
+    }
+
+    async function createCard(
+      hass: Record<string, unknown>,
+    ): Promise<SalahTimesCard> {
+      const card = document.createElement('salah-times-card') as SalahTimesCard;
+      document.body.appendChild(card);
+      card.setConfig({});
+      (card as any).hass = hass;
+      await card.updateComplete;
+      return card;
+    }
+
+    it('falls back to stale entity format (no underscore) when new format is missing', async () => {
+      const futureIso = new Date(Date.now() + 3600_000).toISOString();
+      const card = await createCard(
+        buildMockHass({
+          'sensor.homefajr': {
+            state: futureIso,
+            attributes: { icon: 'mdi:weather-sunny' },
+          },
+        }),
+      );
+      const html = card.shadowRoot?.innerHTML ?? '';
+      // The prayer name should be rendered
+      expect(html).toContain('Fajr');
+      // The cell should use the stale format entity ID
+      const cell = card.shadowRoot?.querySelector('salah-times-cell');
+      const entityId = cell?.getAttribute('entity-id');
+      expect(entityId).toBe('sensor.homefajr');
+    });
+
+    it('prefers new entity format (with underscore) when both exist', async () => {
+      const futureIso = new Date(Date.now() + 3600_000).toISOString();
+      const card = await createCard(
+        buildMockHass({
+          'sensor.home_fajr': {
+            state: futureIso,
+            attributes: { icon: 'mdi:weather-sunny' },
+          },
+          'sensor.homefajr': {
+            state: futureIso,
+            attributes: { icon: 'mdi:weather-sunny' },
+          },
+        }),
+      );
+      const cell = card.shadowRoot?.querySelector('salah-times-cell');
+      const entityId = cell?.getAttribute('entity-id');
+      // Should resolve to the new format (with underscore)
+      expect(entityId).toBe('sensor.home_fajr');
+    });
+  });
 });
