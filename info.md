@@ -13,3 +13,5 @@ Islamic prayer times for Home Assistant.
 Powered by [AlAdhan.com](https://aladhan.com/prayer-times-api) and [islamic.app](https://api.islamic.app/v1).
 
 Requires Home Assistant 2025.6+.
+
+- **Built-in Lovelace card** — `custom:salah-times-card` auto-registers on install, no manual resource edit needed.

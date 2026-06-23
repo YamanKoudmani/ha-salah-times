@@ -10,7 +10,9 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.lovelace.resources import ResourceStorageCollection
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -41,6 +43,10 @@ PLATFORMS: list[Platform] = [
     Platform.CALENDAR,
     Platform.BUTTON,
 ]
+
+# Card file URL — served by the static path registered in async_setup_entry
+_CARD_BASE_URL = "/salah_times/frontend"
+_CARD_URL = f"{_CARD_BASE_URL}/salah-times-card.js"
 
 
 async def async_setup(hass: HomeAssistant, config: dict[str, Any]) -> bool:
@@ -138,15 +144,21 @@ async def async_setup_entry(
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # ------------------------------------------------------------------
-    # Register the built frontend card as a static path (one time only)
+    # Register the built frontend card (one time only)
     # ------------------------------------------------------------------
+    # 1. Serve the card file at a known URL via the static-path config.
+    # 2. Register the URL as a Lovelace resource so the card appears in
+    #    the card picker. ResourceStorageCollection persists across HA
+    #    restarts in storage-mode dashboards; add_extra_js_url is the
+    #    fallback for YAML-mode dashboards.
     if "salah_times_card_registered" not in hass.data.get(DOMAIN, {}):
         await hass.http.async_register_static_paths([
             StaticPathConfig(
-                url_path="/salah_times/frontend",
+                url_path=_CARD_BASE_URL,
                 path=str(Path(__file__).parent / "frontend" / "dist"),
             )
         ])
+        await _async_register_card_resource(hass, _CARD_URL)
         hass.data.setdefault(DOMAIN, {})["salah_times_card_registered"] = True
 
     return True
@@ -206,3 +218,50 @@ async def async_options_updated(
     coordinator._api.set_failover_enabled(enable_failover)
 
     await coordinator.async_request_refresh()
+
+
+async def _async_register_card_resource(
+    hass: HomeAssistant, card_url: str
+) -> None:
+    """Register the card JS as a Lovelace resource.
+
+    Tries the modern ResourceStorageCollection first (persists across
+    restarts in storage-mode dashboards). Falls back to
+    ``add_extra_js_url`` for YAML-mode dashboards or when the
+    resource collection is not yet available.
+
+    Idempotent: re-runs update the existing entry rather than
+    creating duplicates. Safe to call on every config-entry setup.
+    """
+    lovelace = hass.data.get("lovelace")
+    resources = (
+        lovelace.resources
+        if lovelace is not None and hasattr(lovelace, "resources")
+        else None
+    )
+
+    if isinstance(resources, ResourceStorageCollection):
+        # Force-load if not already loaded — required on first HA boot.
+        if hasattr(resources, "loaded") and not getattr(resources, "loaded", False):
+            await resources.async_load()
+            resources.loaded = True  # type: ignore[attr-defined]
+
+        for item in resources.async_items():
+            url = item.get("url", "")
+            if url.startswith(_CARD_BASE_URL):
+                # Already registered — just update the URL if it changed
+                # (e.g. cache-buster query string or path correction).
+                if url != card_url:
+                    await resources.async_update_item(
+                        item["id"],
+                        {"res_type": "module", "url": card_url},
+                    )
+                return
+
+        await resources.async_create_item(
+            {"res_type": "module", "url": card_url}
+        )
+        return
+
+    # Fallback: YAML-mode Lovelace or resource collection unavailable.
+    add_extra_js_url(hass, card_url)

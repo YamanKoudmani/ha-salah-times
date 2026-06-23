@@ -4,7 +4,15 @@ A cohesive prayer-times Lovelace card for the Salah Times Home Assistant integra
 
 ## Installation
 
-Add the following to your Lovelace resources:
+The card is **auto-registered** as a Lovelace resource when the
+`salah_times` integration sets up. No manual edit needed.
+
+After installing or updating the integration, hard-refresh your browser
+(`Ctrl+Shift+R`) so the new bundle is fetched. The card will appear
+in the card picker under the name **"Salah Times"**.
+
+If your Lovelace is in YAML mode and the card does not appear, you
+can still add the resource manually:
 
 ```yaml
 resources:
