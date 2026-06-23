@@ -30,7 +30,6 @@ class SalahCalendarEntity(SalahTimesEntity, CalendarEntity):
     by fetching additional calendar pages on demand (capped at 12 months).
     """
 
-    _attr_order = 100
     _attr_translation_key = "prayer_schedule"
     _attr_name = "Prayer Schedule"
     _attr_icon = "mdi:calendar-text"

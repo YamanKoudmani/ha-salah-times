@@ -28,20 +28,6 @@ PRAYER_ORDER: tuple[PrayerName, ...] = (
     PrayerName.ISHA,
 )
 
-# Display order for the prayer timestamp sensors in the entity list.
-# Lower numbers appear earlier. Next Prayer is handled separately (order=1)
-# and the calendar/button use larger gaps (100/200) so they sit below all
-# prayer sensors.
-PRAYER_DISPLAY_ORDER: dict[PrayerName, int] = {
-    PrayerName.FAJR: 2,
-    PrayerName.DHUHR: 3,
-    PrayerName.ASR: 4,
-    PrayerName.MAGHRIB: 5,
-    PrayerName.ISHA: 6,
-    PrayerName.SUNRISE: 7,
-    PrayerName.IMSAK: 8,
-    PrayerName.MIDNIGHT: 9,
-}
 
 
 @dataclass

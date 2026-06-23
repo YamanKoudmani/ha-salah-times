@@ -24,7 +24,7 @@ from homeassistant.util import dt as dt_util
 from .const import DOMAIN
 from .coordinator import SalahTimesCoordinator
 from .entity import SalahTimesEntity
-from .models import PRAYER_DISPLAY_ORDER, PRAYER_ORDER, PrayerName, PrayerTimes
+from .models import PRAYER_ORDER, PrayerName, PrayerTimes
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -135,7 +135,6 @@ class SalahTimesPrayerSensor(SalahTimesEntity, SensorEntity):
         super().__init__(coordinator, entry_id, name)
         self.entity_description = description
         self._prayer = prayer
-        self._attr_order = PRAYER_DISPLAY_ORDER[prayer]
         self._attr_unique_id = f"{entry_id}-{prayer.value}"
         # Seed the initial value from the already-populated coordinator so the
         # very first state write (in add_to_platform_finish) produces a valid
@@ -184,7 +183,6 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity, SensorEntity):
         """Initialise the next prayer sensor."""
         super().__init__(coordinator, entry_id, name)
         self.entity_description = NextPrayerSensorDescription()
-        self._attr_order = 1
         self._attr_unique_id = f"{entry_id}-next_prayer"
         # Seed initial state — same rationale as SalahTimesPrayerSensor;
         # the coordinator's first refresh completes before entities exist.
