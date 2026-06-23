@@ -156,6 +156,7 @@ async def async_setup_entry(
             StaticPathConfig(
                 url_path=_CARD_BASE_URL,
                 path=str(Path(__file__).parent / "frontend" / "dist"),
+                cache_headers=False,
             )
         ])
         await _async_register_card_resource(hass, _CARD_URL)
