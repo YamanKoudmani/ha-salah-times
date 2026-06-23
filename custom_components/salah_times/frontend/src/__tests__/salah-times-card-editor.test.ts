@@ -157,4 +157,23 @@ describe('salah-times-card-editor', () => {
     expect(showMethod).toBeTruthy();
     expect(showMethod.description.toLowerCase()).toContain('show hijri date');
   });
+
+  /* ── Entity field label and filter ── */
+
+  it('entity field has the correct label and salah_times integration filter', async () => {
+    editor = document.createElement('salah-times-card-editor') as SalahTimesCardEditor;
+    editor.hass = MOCK_HASS;
+    editor.setConfig({ show_hijri: true });
+    document.body.appendChild(editor);
+    await editor.updateComplete;
+
+    const form = editor.shadowRoot!.querySelector('ha-form') as HaFormStub;
+    const schema = form.schema as any[];
+
+    const entityField = schema.find((f: any) => f.name === 'entity');
+    expect(entityField).toBeTruthy();
+    expect(entityField.label).toBe('Next-prayer sensor');
+    expect(entityField.selector.entity.filter).toBeTruthy();
+    expect(entityField.selector.entity.filter.integration).toBe('salah_times');
+  });
 });

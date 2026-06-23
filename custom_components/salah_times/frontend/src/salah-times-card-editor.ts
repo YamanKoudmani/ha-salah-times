@@ -5,11 +5,16 @@ import type { SalahTimesConfig, HassLike } from "./types.js";
 const SCHEMA = [
   {
     name: "entity",
-    label: "Prayer-time sensor",
+    label: "Next-prayer sensor",
     description:
-      "The integration's 'next prayer' sensor. Leave blank to auto-discover the first one in your system. Override if you have multiple Salah Times locations (e.g. one for Home, one for the office).",
+      "The 'next prayer' sensor from your Salah Times integration — the one that shows the live countdown. The card auto-discovers it (e.g. sensor.home_next_prayer) and uses it to find the matching prayer-time sensors for that location. Override only if you have multiple Salah Times setups and want to pin this card to a specific one — most users should leave this blank.",
     required: false,
-    selector: { entity: { domain: "sensor" } },
+    selector: {
+      entity: {
+        domain: "sensor",
+        filter: { integration: "salah_times" },
+      },
+    },
   },
   {
     name: "show_hijri",
