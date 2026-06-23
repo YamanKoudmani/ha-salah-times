@@ -33,7 +33,7 @@ const DEFAULT_CONFIG: MergedConfig = Object.freeze({
   optional_prayers: [],
 });
 
-function mergeConfig(config: SalahTimesConfig): MergedConfig {
+function mergeConfig(config: SalahTimesConfig | undefined): MergedConfig {
   return { ...DEFAULT_CONFIG, ...config };
 }
 
@@ -54,7 +54,7 @@ function mergeConfig(config: SalahTimesConfig): MergedConfig {
 export class SalahTimesCard extends LitElement {
   /* ── Public reactive properties ── */
   @property({ attribute: false }) hass?: HassLike;
-  @property({ attribute: false }) config!: SalahTimesConfig;
+  @property({ attribute: false }) config?: SalahTimesConfig;
 
   /* ── Internal state ── */
   @state() private _now: number = Date.now();
@@ -265,6 +265,19 @@ export class SalahTimesCard extends LitElement {
    */
   getCardSize(): number {
     return 6;
+  }
+
+  /**
+   * Required by HA Lovelace — receives the YAML config the user
+   * assigned to the card. Store it on the reactive property so Lit
+   * re-renders. Throws on invalid config so the user sees the error
+   * in the dashboard instead of a silent failure.
+   */
+  setConfig(config: SalahTimesConfig): void {
+    if (config === null || typeof config !== "object") {
+      throw new Error("Invalid configuration: expected an object");
+    }
+    this.config = config;
   }
 
   /**

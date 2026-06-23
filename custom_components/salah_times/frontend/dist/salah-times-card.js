@@ -1086,6 +1086,17 @@ let D = class extends R {
     return 6;
   }
   /**
+   * Required by HA Lovelace — receives the YAML config the user
+   * assigned to the card. Store it on the reactive property so Lit
+   * re-renders. Throws on invalid config so the user sees the error
+   * in the dashboard instead of a silent failure.
+   */
+  setConfig(i) {
+    if (i !== null && typeof i != "object")
+      throw new Error("Invalid configuration: expected an object");
+    this.config = i;
+  }
+  /**
    * HA card picker — returns a sensible default config for the YAML editor.
    * The empty fields rely on auto-discovery to find the next_prayer sensor.
    */
