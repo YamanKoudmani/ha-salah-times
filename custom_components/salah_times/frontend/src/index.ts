@@ -5,6 +5,7 @@
  * `salah-times-card.ts` using a `?inline` import.
  */
 import './salah-times-card.js';
+import './salah-times-card-editor.js';
 
 const cardEl = customElements.get('salah-times-card');
 if (cardEl) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import '../salah-times-card.js';
 import type { SalahTimesCard } from '../salah-times-card.js';
 import type { SalahTimesConfig } from '../types.js';

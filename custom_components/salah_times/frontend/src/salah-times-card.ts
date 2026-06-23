@@ -228,7 +228,12 @@ export class SalahTimesCard extends LitElement {
 
   /* ── Statics ── */
 
-
+  /**
+   * HA card picker — returns the visual editor element for the YAML editor.
+   */
+  static getConfigElement(): HTMLElement {
+    return document.createElement("salah-times-card-editor");
+  }
 
   /* ── Lifecycle ── */
 
