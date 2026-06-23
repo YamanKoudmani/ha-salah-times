@@ -15,6 +15,7 @@ from custom_components.salah_times.models import (
 )
 from custom_components.salah_times.sensor import (
     PRAYER_SENSORS,
+    NextPrayerSensorDescription,
     SalahTimesNextPrayerSensor,
     SalahTimesPrayerSensor,
     async_setup_entry,
@@ -95,6 +96,32 @@ class TestPrayerSensors:
         )
         expected = mock_coordinator.data.timings[PrayerName.FAJR]
         assert sensor._attr_native_value == expected
+
+    async def test_prayer_sensor_entity_name(
+        self,
+        hass: HomeAssistant,
+        mock_coordinator,
+        mock_config_entry,
+    ) -> None:
+        """Belt-and-suspenders: ensure entity name is set explicitly so the
+        entity_id generates as sensor.<location>_<prayer> (with underscore),
+        not sensor.<location><prayer> (no underscore) from a stale
+        translation-lookup fallback."""
+        description = next(
+            d for d in PRAYER_SENSORS if d.key == PrayerName.DHUHR.value
+        )
+        sensor = SalahTimesPrayerSensor(
+            coordinator=mock_coordinator,
+            entry_id=mock_config_entry.entry_id,
+            name=mock_config_entry.title,
+            description=description,
+            prayer=PrayerName.DHUHR,
+        )
+        assert sensor._attr_name == "Dhuhr", (
+            f"Expected 'Dhuhr', got '{sensor._attr_name}'"
+        )
+        assert sensor.has_entity_name is True
+        assert sensor.suggested_object_id == "Dhuhr"
 
 
 class TestNextPrayerSensor:
@@ -305,3 +332,20 @@ class TestNextPrayerSensor:
         assert sensor._attr_native_value is None
         assert sensor._attr_extra_state_attributes.get("prayer") is None
         assert sensor._attr_extra_state_attributes.get("time_remaining") is None
+
+    async def test_next_prayer_sensor_entity_name(
+        self,
+        hass: HomeAssistant,
+        mock_coordinator,
+        mock_config_entry,
+    ) -> None:
+        """Belt-and-suspenders: ensure next_prayer sensor has explicit name."""
+        sensor = SalahTimesNextPrayerSensor(
+            coordinator=mock_coordinator,
+            entry_id=mock_config_entry.entry_id,
+            name=mock_config_entry.title,
+        )
+        assert sensor._attr_name == "Next Prayer", (
+            f"Expected 'Next Prayer', got '{sensor._attr_name}'"
+        )
+        assert sensor.has_entity_name is True

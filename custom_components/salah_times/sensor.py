@@ -134,6 +134,7 @@ class SalahTimesPrayerSensor(SalahTimesEntity, SensorEntity):
         """Initialise the prayer timestamp sensor."""
         super().__init__(coordinator, entry_id, name)
         self.entity_description = description
+        self._attr_name = description.name  # Belt-and-suspenders: explicit entity name
         self._prayer = prayer
         self._attr_unique_id = f"{entry_id}-{prayer.value}"
         # Seed the initial value from the already-populated coordinator so the
@@ -183,6 +184,7 @@ class SalahTimesNextPrayerSensor(SalahTimesEntity, SensorEntity):
         """Initialise the next prayer sensor."""
         super().__init__(coordinator, entry_id, name)
         self.entity_description = NextPrayerSensorDescription()
+        self._attr_name = NextPrayerSensorDescription.name  # Belt-and-suspenders: explicit entity name
         self._attr_unique_id = f"{entry_id}-next_prayer"
         # Seed initial state — same rationale as SalahTimesPrayerSensor;
         # the coordinator's first refresh completes before entities exist.
