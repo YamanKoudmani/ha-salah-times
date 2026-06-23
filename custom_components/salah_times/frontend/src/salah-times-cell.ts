@@ -61,7 +61,7 @@ export class SalahTimesCell extends LitElement {
       background-color: color-mix(
         in srgb,
         var(--primary-text-color) 5%,
-        var(--card-background-color)
+        var(--ha-card-background, var(--card-background-color, transparent))
       );
       transition-duration: 120ms;
     }
@@ -90,7 +90,7 @@ export class SalahTimesCell extends LitElement {
       background-color: color-mix(
         in srgb,
         var(--accent) 12%,
-        var(--card-background-color)
+        var(--ha-card-background, var(--card-background-color, transparent))
       );
     }
 

@@ -96,7 +96,7 @@ export class SalahTimesCard extends LitElement {
       }
 
       .card {
-        background: var(--card-background-color);
+        background: var(--ha-card-background, var(--card-background-color, transparent));
         border-radius: 16px;
         overflow: hidden;
         padding: 20px;
@@ -113,8 +113,12 @@ export class SalahTimesCard extends LitElement {
         border-radius: 10px;
         background: linear-gradient(
           180deg,
-          color-mix(in srgb, var(--accent) 8%, var(--card-background-color)) 0%,
-          var(--card-background-color) 60%
+          color-mix(
+            in srgb,
+            var(--accent) 8%,
+            var(--ha-card-background, var(--card-background-color, transparent))
+          ) 0%,
+          var(--ha-card-background, var(--card-background-color, transparent)) 60%
         );
       }
 
@@ -175,11 +179,7 @@ export class SalahTimesCard extends LitElement {
       .hairline {
         height: 1px;
         margin: 0 0 12px;
-        background: color-mix(
-          in srgb,
-          var(--primary-text-color) 8%,
-          transparent
-        );
+        background: var(--divider-color, color-mix(in srgb, var(--primary-text-color) 8%, transparent));
       }
 
       /* ── Prayer cell row ── */
