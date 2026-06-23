@@ -7,8 +7,10 @@ as timestamp sensors, a next-prayer sensor, and a calendar entity.
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 from typing import Any
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -134,6 +136,18 @@ async def async_setup_entry(
     # Forward to sensor and calendar platforms
     # ------------------------------------------------------------------
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    # ------------------------------------------------------------------
+    # Register the built frontend card as a static path (one time only)
+    # ------------------------------------------------------------------
+    if "salah_times_card_registered" not in hass.data.get(DOMAIN, {}):
+        await hass.http.async_register_static_paths([
+            StaticPathConfig(
+                url_path="/salah_times/frontend",
+                path=str(Path(__file__).parent / "frontend" / "dist"),
+            )
+        ])
+        hass.data.setdefault(DOMAIN, {})["salah_times_card_registered"] = True
 
     return True
 

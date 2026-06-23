@@ -86,6 +86,11 @@
       }
     }
   },
+  "card": {
+    "title": "Prayer times",
+    "waiting": "Salah Times — waiting for sensor…",
+    "unavailable": "Prayer sensors unavailable — check that the next_prayer sensor has matching timestamp sensors."
+  },
   "services": {
     "refresh": {
       "name": "Refresh prayer times",
