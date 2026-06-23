@@ -199,4 +199,33 @@ describe('salah-times-cell', () => {
     expect(handler).not.toHaveBeenCalled();
     cell.removeEventListener('hass-more-info', handler);
   });
+
+  /* ── Time text layout ── */
+
+  it('renders time without wrapping (white-space: nowrap applied)', async () => {
+    cell = await createCell({ time: '10:13 PM' });
+    const timeEl = cell.shadowRoot!.querySelector('.cell__time') as HTMLElement;
+    expect(timeEl).toBeTruthy();
+    // jsdom getComputedStyle doesn't resolve styles from constructible
+    // stylesheets. Verify via the shadow root's style rules instead.
+    const sheets = cell.shadowRoot!.adoptedStyleSheets;
+    if (sheets && sheets.length > 0) {
+      // Modern Lit with adoptedStyleSheets
+      const rules = sheets.flatMap((s: any) => Array.from(s.cssRules));
+      const hasNowrap = rules.some((r: any) =>
+        r.cssText?.includes('.cell__time') && r.cssText?.includes('white-space: nowrap'),
+      );
+      expect(hasNowrap).toBe(true);
+    } else {
+      // Fallback: find <style> element in shadow root
+      const styleEl = cell.shadowRoot!.querySelector('style');
+      const cssText = styleEl?.textContent ?? '';
+      // Compressed form: Lit may strip spaces
+      const normalized = cssText.replace(/\s+/g, ' ');
+      expect(normalized).toContain('.cell__time');
+      expect(normalized).toContain('white-space: nowrap');
+    }
+    // Verify the rendered text stays on one line (no wrapping marker)
+    expect(timeEl.textContent).toBe('10:13 PM');
+  });
 });

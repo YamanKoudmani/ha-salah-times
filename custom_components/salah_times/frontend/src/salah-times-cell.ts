@@ -37,7 +37,7 @@ export class SalahTimesCell extends LitElement {
       align-items: center;
       justify-content: center;
       gap: 4px;
-      padding: 8px 0;
+      padding: 6px 0;
       border-radius: 10px;
       cursor: default;
       overflow: hidden;
@@ -153,7 +153,7 @@ export class SalahTimesCell extends LitElement {
 
     /* ── Cell internals ── */
     .cell__icon {
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1;
       display: flex;
       align-items: center;
@@ -176,11 +176,12 @@ export class SalahTimesCell extends LitElement {
       font-family:
         'Bricolage Grotesque', 'SF Pro Display', -apple-system,
         BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      font-size: clamp(15px, 4.4vw, 18px);
+      font-size: clamp(13px, 3.6vw, 16px);
       font-weight: 600;
       font-variant-numeric: tabular-nums lining-nums;
       line-height: 1;
       letter-spacing: -0.01em;
+      white-space: nowrap;
       transition: color 240ms ease-out;
     }
 

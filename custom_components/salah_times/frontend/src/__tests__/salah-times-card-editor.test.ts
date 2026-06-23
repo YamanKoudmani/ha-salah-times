@@ -116,4 +116,45 @@ describe('salah-times-card-editor', () => {
     expect(event.bubbles).toBe(true);
     expect(event.composed).toBe(true);
   });
+
+  /* ── Schema labels and descriptions ── */
+
+  it('schema includes human-readable labels and descriptions for all fields', async () => {
+    editor = document.createElement('salah-times-card-editor') as SalahTimesCardEditor;
+    editor.hass = MOCK_HASS;
+    editor.setConfig({ show_hijri: true });
+    document.body.appendChild(editor);
+    await editor.updateComplete;
+
+    const form = editor.shadowRoot!.querySelector('ha-form') as HaFormStub;
+    const schema = form.schema as any[];
+
+    expect(schema).toBeTruthy();
+    expect(schema.length).toBeGreaterThan(0);
+
+    for (const field of schema) {
+      expect(field).toHaveProperty('name');
+      expect(field).toHaveProperty('label');
+      expect(field).toHaveProperty('description');
+      expect(typeof field.label).toBe('string');
+      expect(field.label.length).toBeGreaterThan(0);
+      expect(typeof field.description).toBe('string');
+      expect(field.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('show_method has a description explaining its dependency on show_hijri', async () => {
+    editor = document.createElement('salah-times-card-editor') as SalahTimesCardEditor;
+    editor.hass = MOCK_HASS;
+    editor.setConfig({ show_hijri: true });
+    document.body.appendChild(editor);
+    await editor.updateComplete;
+
+    const form = editor.shadowRoot!.querySelector('ha-form') as HaFormStub;
+    const schema = form.schema as any[];
+
+    const showMethod = schema.find((f: any) => f.name === 'show_method');
+    expect(showMethod).toBeTruthy();
+    expect(showMethod.description.toLowerCase()).toContain('show hijri date');
+  });
 });
