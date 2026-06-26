@@ -58,7 +58,13 @@ export class SalahTimesCard extends LitElement {
   /* ── Internal state ── */
   @state() private _now: number = Date.now();
   @state() private _colonVisible = true;
-  @state() private _lastValidAttrs: Record<string, unknown> | null = null;
+
+  /**
+   * Hijri attribute cache. Survives attribute clears after Isha.
+   * NOT @state() — mutated in willUpdate() so render() stays read-only.
+   * Cleared on config change to prevent cross-entity data bleed.
+   */
+  private _lastValidAttrs: Record<string, unknown> | null = null;
 
   private _intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -276,6 +282,22 @@ export class SalahTimesCard extends LitElement {
       } else {
         this.style.removeProperty('--accent');
       }
+      // Clear hijri cache on config change to prevent cross-entity data bleed
+      this._lastValidAttrs = null;
+    }
+
+    // Cache hijri attrs from hass so they survive attribute clears after Isha.
+    // Moved from render() — keeps render() read-only and avoids @state()
+    // double-render. Keyed by the auto-resolved entity; cleared on config
+    // change above so switching entity config invalidates the cache.
+    if (changed.has('hass') && this.hass?.states) {
+      const entity = this._resolveEntity();
+      if (entity && this.hass.states[entity]) {
+        const attrs = this.hass.states[entity].attributes as Record<string, unknown> | undefined;
+        if (attrs?.hijri_date != null) {
+          this._lastValidAttrs = { ...attrs };
+        }
+      }
     }
   }
 
@@ -332,9 +354,12 @@ export class SalahTimesCard extends LitElement {
    * For `sensor.home_next_prayer` this returns `sensor.home_`.
    * Prayer entities are then named `{base}{key}` (e.g. `sensor.home_fajr`).
    * Returns null if the resolved entity doesn't end with `_next_prayer`.
+   *
+   * @param resolvedEntity - Pre-resolved entity ID from the caller,
+   *   avoiding a redundant O(n) `_resolveEntity()` scan on the hot path.
    */
-  private _deriveBaseEntityId(): string | null {
-    const resolved = this._resolveEntity();
+  private _deriveBaseEntityId(resolvedEntity?: string | null): string | null {
+    const resolved = resolvedEntity ?? this._resolveEntity();
     if (!resolved) return null;
     const suffix = '_next_prayer';
     if (!resolved.endsWith(suffix)) return null;
@@ -389,9 +414,7 @@ export class SalahTimesCard extends LitElement {
     /* 3. Entity state — may be unknown/unavailable; per-prayer sensors rescue */
     const entityState = this.hass.states[resolvedEntity];
     const attrs = (entityState?.attributes ?? {}) as Record<string, unknown>;
-    if (attrs.hijri_date != null) {
-      this._lastValidAttrs = attrs;
-    }
+    // Hijri cache is updated in willUpdate() — read-only here
     const effectiveAttrs = (this._lastValidAttrs ?? attrs) as Record<string, unknown>;
 
     const cfg = mergeConfig(this.config);
@@ -409,7 +432,7 @@ export class SalahTimesCard extends LitElement {
 
     /* 5. Build cell data */
     const nextPrayerAttr = attrs.prayer as string | undefined;
-    const baseEntityId = this._deriveBaseEntityId();
+    const baseEntityId = this._deriveBaseEntityId(resolvedEntity);
 
     interface CellDatum {
       key: string;
@@ -500,9 +523,11 @@ export class SalahTimesCard extends LitElement {
       nextCellKey = fallbackPrayerKey;
       nextCell = cellData.find((c) => c.key === fallbackPrayerKey) ?? null;
     } else {
-      // Primary: find the first cell whose timestamp is still in the future
+      // Primary: find the first OBLIGATORY cell whose timestamp is still in the future.
+      // Filter to obligatory prayers only — optional markers (sunrise/imsak/midnight)
+      // must never be highlighted as 'next' even when their timestamps are available.
       nextCell = cellData.find(
-        (c) => c.timeMs !== null && c.timeMs > this._now,
+        (c) => (OBLIGATORY_PRAYERS as readonly string[]).includes(c.key) && c.timeMs !== null && c.timeMs > this._now,
       ) ?? null;
       nextCellKey = nextCell?.key ?? null;
     }

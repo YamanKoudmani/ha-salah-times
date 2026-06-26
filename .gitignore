@@ -32,3 +32,6 @@ node_modules/
 # dist/ is intentionally committed: HACS zip_release requires the built
 # card JS to be present at the tag. Rebuild via `npm run build` before
 # any release commit.
+
+# Compound Engineering local config
+.compound-engineering/*.local.yaml
