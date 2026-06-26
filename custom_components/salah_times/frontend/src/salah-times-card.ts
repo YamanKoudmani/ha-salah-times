@@ -82,6 +82,20 @@ export class SalahTimesCard extends LitElement {
 
         /* One-shot entry animation */
         animation: salah-card-entry 320ms ease-out forwards;
+
+        /* ── Theme surface ── */
+        /* Mirror ha-card's :host variables so the card blends with themed
+         * dashboard surfaces (glassmorphism, dark/light, custom themes).
+         * --ha-card-background picks up semi-transparent backgrounds from
+         * frosted-glass themes; --ha-card-backdrop-filter applies the blur.
+         * border-radius defaults to 16px (the card's design intent) but
+         * themes can override via --ha-card-border-radius. */
+        background: var(--ha-card-background, var(--card-background-color, white));
+        -webkit-backdrop-filter: var(--ha-card-backdrop-filter, none);
+        backdrop-filter: var(--ha-card-backdrop-filter, none);
+        border-radius: var(--ha-card-border-radius, 16px);
+        box-shadow: var(--ha-card-box-shadow, none);
+        overflow: hidden;
       }
 
       @keyframes salah-card-entry {
@@ -102,9 +116,8 @@ export class SalahTimesCard extends LitElement {
       }
 
       .card {
-        background: var(--ha-card-background, var(--card-background-color, transparent));
-        border-radius: 16px;
-        overflow: hidden;
+        /* Background, border-radius, and overflow are on :host (theme surface).
+         * .card is now a layout-only container — just internal padding. */
         padding: 20px;
       }
 
