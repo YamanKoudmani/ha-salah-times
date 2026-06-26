@@ -2,7 +2,6 @@ import { LitElement, html, css, nothing, unsafeCSS, PropertyValues } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { classMap } from 'lit/directives/class-map.js';
-import { styleMap } from 'lit/directives/style-map.js';
 import type { SalahTimesConfig, HassLike } from './types.js';
 import { PRAYER_META, OBLIGATORY_PRAYERS, PRAYER_SEQUENCE } from './constants.js';
 import {
@@ -59,6 +58,7 @@ export class SalahTimesCard extends LitElement {
   /* ── Internal state ── */
   @state() private _now: number = Date.now();
   @state() private _colonVisible = true;
+  @state() private _lastValidAttrs: Record<string, unknown> | null = null;
 
   private _intervalId: ReturnType<typeof setInterval> | null = null;
 
@@ -185,7 +185,15 @@ export class SalahTimesCard extends LitElement {
       /* ── Prayer cell row ── */
       .row {
         display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
+        /* Auto-fit: cells wrap to additional rows when the container can't
+         * fit them at the 96px minimum. Up to 8 cells (5 obligatory + 3
+         * optional) are supported — at ~600px+ they fit in 1 row, at
+         * ~350-500px (iPad 2-col dashboard) they wrap to 2 rows, and at
+         * ≤400px the 1-col override below stacks them full-width.
+         * The min(96px, 100%) guard ensures the track min can never exceed
+         * the container width (which would otherwise overflow very narrow
+         * containers where 96px > container width). */
+        grid-template-columns: repeat(auto-fit, minmax(min(96px, 100%), 1fr));
         gap: 8px;
       }
 
@@ -208,7 +216,13 @@ export class SalahTimesCard extends LitElement {
       }
 
       /* ── Narrow container ── */
-      @container (max-width: 319px) {
+      /* Threshold raised from 319px → 400px so iPad 2-col dashboard
+       * columns (typically 350-500px wide) get the stacked full-width
+       * cell layout instead of an auto-fit 3+2 wrap that's still
+       * cramped. Must stay in sync with the cell's @container breakpoint
+       * in salah-times-cell.ts so the cell's horizontal-row layout kicks
+       * in at the same width the card stacks. */
+      @container (max-width: 400px) {
         .row {
           grid-template-columns: 1fr;
           gap: 4px;
@@ -372,22 +386,15 @@ export class SalahTimesCard extends LitElement {
       `;
     }
 
-    /* 3. Check entity state */
+    /* 3. Entity state — may be unknown/unavailable; per-prayer sensors rescue */
     const entityState = this.hass.states[resolvedEntity];
-    if (
-      !entityState ||
-      entityState.state === 'unknown' ||
-      entityState.state === 'unavailable'
-    ) {
-      return html`
-        <div class="card" role="status" aria-label=${cardTitle}>
-          <div class="waiting">${waitingMsg}</div>
-        </div>
-      `;
+    const attrs = (entityState?.attributes ?? {}) as Record<string, unknown>;
+    if (attrs.hijri_date != null) {
+      this._lastValidAttrs = attrs;
     }
+    const effectiveAttrs = (this._lastValidAttrs ?? attrs) as Record<string, unknown>;
 
     const cfg = mergeConfig(this.config);
-    const attrs = entityState.attributes as Record<string, unknown>;
     const now = new Date(this._now);
     const hour12 = this._getHour12();
     const locale = this.hass?.locale?.language ?? 'en-US';
@@ -402,9 +409,6 @@ export class SalahTimesCard extends LitElement {
 
     /* 5. Build cell data */
     const nextPrayerAttr = attrs.prayer as string | undefined;
-    const nextPrayerKey = nextPrayerAttr
-      ? nextPrayerAttr.toLowerCase()
-      : null;
     const baseEntityId = this._deriveBaseEntityId();
 
     interface CellDatum {
@@ -412,6 +416,7 @@ export class SalahTimesCard extends LitElement {
       name: string;
       icon: string;
       time: string;
+      timeMs: number | null;
       state: 'past' | 'next' | 'future';
       entityId: string | null;
     }
@@ -463,16 +468,7 @@ export class SalahTimesCard extends LitElement {
       const timeStr = formatTime(tsIso, locale, tz, hour12);
       const icon = (prayerState?.attributes?.icon as string | undefined) ?? meta.icon;
       const entityId = prayerEntityId;
-
-      let state: 'past' | 'next' | 'future';
-      if (nextPrayerKey === key) {
-        state = 'next';
-      } else if (tsIso) {
-        const prayerTime = new Date(tsIso).getTime();
-        state = prayerTime <= this._now ? 'past' : 'future';
-      } else {
-        state = 'future';
-      }
+      const timeMs = tsIso ? new Date(tsIso).getTime() : null;
 
       const localizedName = this.hass?.localize?.(`component.salah_times.entity.sensor.${key}.name`) ?? meta.name;
 
@@ -481,32 +477,70 @@ export class SalahTimesCard extends LitElement {
         name: localizedName,
         icon,
         time: timeStr,
-        state,
+        timeMs,
+        state: 'future', // placeholder — reassigned in pass 2 below
         entityId,
       });
     }
 
-    /* 6. Hero data */
-    const prayerAttr = attrs.prayer as string | undefined;
-    const prayerKey = prayerAttr ? prayerAttr.toLowerCase() : null;
-    const localizedPrayerName = (prayerKey && this.hass?.localize?.(`component.salah_times.entity.sensor.${prayerKey}.name`)) ?? prayerAttr ?? '\u2014';
-    const hijriDate = attrs.hijri_date as string | undefined | null;
-    const method = attrs.calculation_method as string | undefined | null;
-    const hijriHolidays = attrs.hijri_holidays as string[] | undefined | null;
+    /* 6. Derive next prayer from timestamps vs local clock (self-correcting) */
+    // Derive from obligatory prayers only — optional ones may be registry-disabled → null timeMs
+    const obligatoryAllMissing = cellData
+      .filter((c) => (OBLIGATORY_PRAYERS as readonly string[]).includes(c.key))
+      .every((c) => c.timeMs === null);
 
-    /* Hero countdown — derived from next prayer's timestamp, ticks every second */
-    const nextTimeIso =
-      entityState.state && entityState.state !== 'unknown' && entityState.state !== 'unavailable'
-        ? entityState.state
+    let nextCell: CellDatum | null = null;
+    let nextCellKey: string | null = null;
+
+    if (obligatoryAllMissing) {
+      // Fallback: all obligatory per-prayer timestamps missing — use attrs.prayer from next_prayer sensor
+      const fallbackPrayerKey = nextPrayerAttr
+        ? nextPrayerAttr.toLowerCase()
         : null;
-    const nextTimeMs = nextTimeIso ? new Date(nextTimeIso).getTime() : NaN;
-    const secondsUntilNext =
-      Number.isFinite(nextTimeMs) && nextTimeMs > this._now
-        ? Math.round((nextTimeMs - this._now) / 1000)
-        : null;
+      nextCellKey = fallbackPrayerKey;
+      nextCell = cellData.find((c) => c.key === fallbackPrayerKey) ?? null;
+    } else {
+      // Primary: find the first cell whose timestamp is still in the future
+      nextCell = cellData.find(
+        (c) => c.timeMs !== null && c.timeMs > this._now,
+      ) ?? null;
+      nextCellKey = nextCell?.key ?? null;
+    }
+
+    // Boundary rule: a cell is 'past' at the instant its time equals _now (inclusive).
+    // A cell is 'next' only when its time is strictly after _now.
+    // The 1Hz _now tick reassigns both on the same tick, so no stale highlight at boundaries.
+    // Reassign states for all cells
+    for (const cell of cellData) {
+      if (cell.key === nextCellKey) {
+        cell.state = 'next';
+      } else if (cell.timeMs !== null && cell.timeMs <= this._now) {
+        cell.state = 'past';
+      } else {
+        cell.state = 'future';
+      }
+    }
+
+    /* 7. Hero data */
+    const heroLocalizedName = nextCell?.name ?? '\u2014';
+    const hijriDate = effectiveAttrs.hijri_date as string | undefined | null;
+    const method = effectiveAttrs.calculation_method as string | undefined | null;
+    const hijriHolidays = effectiveAttrs.hijri_holidays as string[] | undefined | null;
+
+    /* Hero countdown — from derived nextCell's timestamp vs local clock */
+    let heroSecondsUntilNext: number | null = null;
+    if (nextCell?.timeMs != null && nextCell.timeMs > this._now) {
+      heroSecondsUntilNext = Math.round((nextCell.timeMs - this._now) / 1000);
+    } else if (obligatoryAllMissing && entityState?.state && entityState.state !== 'unknown' && entityState.state !== 'unavailable') {
+      // Fallback: use next_prayer sensor's state for countdown
+      const fallbackMs = new Date(entityState.state).getTime();
+      if (Number.isFinite(fallbackMs) && fallbackMs > this._now) {
+        heroSecondsUntilNext = Math.round((fallbackMs - this._now) / 1000);
+      }
+    }
     const countdownStr =
-      cfg.show_countdown && secondsUntilNext !== null
-        ? formatCountdown(secondsUntilNext)
+      cfg.show_countdown && heroSecondsUntilNext !== null
+        ? formatCountdown(heroSecondsUntilNext)
         : null;
     const hijriLine =
       cfg.show_hijri
@@ -520,7 +554,7 @@ export class SalahTimesCard extends LitElement {
       hour12,
     );
 
-    /* 7. Colon blink — split time to isolate the colon */
+    /* 8. Colon blink — split time to isolate the colon */
     const colonIdx = heroTimeStr.indexOf(':');
     const timeBeforeColon =
       colonIdx >= 0 ? heroTimeStr.slice(0, colonIdx) : heroTimeStr;
@@ -532,7 +566,17 @@ export class SalahTimesCard extends LitElement {
       'colon--hidden': !this._colonVisible,
     });
 
-    /* 8. No cells at all → show "waiting" with hero skeleton */
+    /* 9. Bail if next_prayer sensor is missing/unknown AND no per-prayer data */
+    const hasEntityState = !!(entityState?.state) && entityState.state !== 'unknown' && entityState.state !== 'unavailable';
+    if (!hasEntityState && obligatoryAllMissing) {
+      return html`
+        <div class="card" role="status" aria-label=${cardTitle}>
+          <div class="waiting">${waitingMsg}</div>
+        </div>
+      `;
+    }
+
+    /* 10. No cells at all → show "waiting" with hero skeleton */
     if (cellData.length === 0) {
       return html`
         <div class="card">
@@ -541,10 +585,10 @@ export class SalahTimesCard extends LitElement {
               ${timeBeforeColon}<span class=${colonClasses}>:</span
               >${timeAfterColon}
             </div>
-            ${cfg.show_countdown && countdownStr && localizedPrayerName !== '\u2014'
+            ${cfg.show_countdown && countdownStr && heroLocalizedName !== '\u2014'
               ? html`
                   <div class="hero__countdown">
-                    ${localizedPrayerName} in ${countdownStr}
+                    ${heroLocalizedName} in ${countdownStr}
                   </div>
                 `
               : nothing}
@@ -560,9 +604,8 @@ export class SalahTimesCard extends LitElement {
       `;
     }
 
-    /* 9. Normal render */
+    /* 11. Normal render */
     const dateStr = formatDate(now, locale, tz);
-    const gridCols = `repeat(${cellData.length}, minmax(0, 1fr))`;
 
     return html`
       <div class="card" role="region" aria-label=${cardTitle}>
@@ -573,10 +616,10 @@ export class SalahTimesCard extends LitElement {
             >${timeAfterColon}
           </div>
           <div class="hero__date">${dateStr}</div>
-          ${cfg.show_countdown && countdownStr && localizedPrayerName !== '\u2014'
+          ${cfg.show_countdown && countdownStr && heroLocalizedName !== '\u2014'
               ? html`
                   <div class="hero__countdown">
-                    ${localizedPrayerName} in ${countdownStr}
+                    ${heroLocalizedName} in ${countdownStr}
                   </div>
                 `
               : nothing}
@@ -589,10 +632,7 @@ export class SalahTimesCard extends LitElement {
         <div class="hairline"></div>
 
         <!-- Cell grid -->
-        <div
-          class="row"
-          style=${styleMap({ 'grid-template-columns': gridCols })}
-        >
+        <div class="row">
           ${repeat(
             cellData,
             (cell) => cell.key,

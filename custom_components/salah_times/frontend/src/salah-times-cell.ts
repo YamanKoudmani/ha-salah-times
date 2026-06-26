@@ -176,7 +176,10 @@ export class SalahTimesCell extends LitElement {
       font-family:
         'Bricolage Grotesque', 'SF Pro Display', -apple-system,
         BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
-      font-size: clamp(13px, 3.6vw, 16px);
+      /* Clamp max lowered 16px → 15px to keep "10:13 PM" (~55px wide)
+       * inside the 96px minimum cell width set by the card's auto-fit
+       * grid. Cell padding is 6px 0, so content area equals cell width. */
+      font-size: clamp(13px, 3.4vw, 15px);
       font-weight: 600;
       font-variant-numeric: tabular-nums lining-nums;
       line-height: 1;
@@ -196,11 +199,15 @@ export class SalahTimesCell extends LitElement {
     }
 
     :host([compact]) .cell__time {
-      font-size: clamp(13px, 3.5vw, 16px);
+      font-size: clamp(13px, 3.3vw, 15px);
     }
 
     /* ── Narrow container: horizontal single-column layout ── */
-    @container (max-width: 319px) {
+    /* Threshold raised 319px → 400px to match the card's @container
+     * breakpoint in salah-times-card.ts. The cell flips to a horizontal
+     * row layout (icon · name · time) at the same width the card stacks
+     * cells full-width, so the two layouts stay in sync. */
+    @container (max-width: 400px) {
       .cell {
         flex-direction: row;
         padding: 0 4px;
